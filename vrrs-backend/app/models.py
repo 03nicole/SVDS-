@@ -37,12 +37,12 @@ class Report(Base):
     resolved_date      = Column(DateTime(timezone=True))
     resolved_by        = Column(Integer, ForeignKey("users.id"), nullable=True)
     reporter           = relationship("User", back_populates="reports", foreign_keys=[reported_by])
-    alerts             = relationship("Alert", back_populates="report")
+    alerts             = relationship("Alert", back_populates="report", cascade="all, delete-orphan", passive_deletes=True)
 
 class Alert(Base):
     __tablename__ = "alerts"
     id               = Column(Integer, primary_key=True, index=True)
-    report_id        = Column(Integer, ForeignKey("reports.id"), nullable=False)
+    report_id        = Column(Integer, ForeignKey("reports.id", ondelete="CASCADE"), nullable=False)
     location_spotted = Column(Text)
     camera_id        = Column(String(50))
     confidence_score = Column(Float)

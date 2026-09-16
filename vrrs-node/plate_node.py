@@ -12,7 +12,6 @@ import os
 # is set before either is imported.
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
-import re
 import time
 
 import cv2
@@ -20,6 +19,8 @@ import requests
 from dotenv import load_dotenv
 from ultralytics import YOLO
 import easyocr
+
+from plate_utils import clean_plate_text, is_recent_duplicate
 
 load_dotenv()
 
@@ -35,15 +36,6 @@ DETECT_CONF = float(os.getenv("DETECT_CONF", "0.4"))
 PROCESS_EVERY_N_FRAMES = int(os.getenv("PROCESS_EVERY_N_FRAMES", "5"))
 RESEND_COOLDOWN_SECONDS = int(os.getenv("RESEND_COOLDOWN_SECONDS", "15"))
 DEVICE = os.getenv("DEVICE", "cuda")
-
-# Zambian plates look like "BAA 1234" — three letters, four digits, no spaces
-# once cleaned. Loose on purpose since OCR on a phone feed is noisy.
-PLATE_PATTERN = re.compile(r"[A-Z0-9]{5,8}")
-
-
-def clean_plate_text(raw: str) -> str | None:
-    text = re.sub(r"[^A-Z0-9]", "", raw.upper())
-    return text if PLATE_PATTERN.fullmatch(text) else None
 
 
 def report_plate(plate: str, confidence: float) -> None:
@@ -77,7 +69,7 @@ def main() -> None:
             "are on the same Wi-Fi, and PHONE_STREAM_URL in .env matches."
         )
 
-    last_sent: dict[str, float] = {}
+    recent_sightings: list[tuple[str, float]] = []
     frame_count = 0
 
     print("Running. Press 'q' in the preview window to quit.")
@@ -120,8 +112,8 @@ def main() -> None:
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
                     now = time.time()
-                    if now - last_sent.get(plate, 0) > RESEND_COOLDOWN_SECONDS:
-                        last_sent[plate] = now
+                    if not is_recent_duplicate(recent_sightings, plate, now, RESEND_COOLDOWN_SECONDS):
+                        recent_sightings.append((plate, now))
                         report_plate(plate, round(det_conf * 100, 1))
 
         cv2.imshow("SVDS Plate Node - press q to quit", frame)

@@ -4,7 +4,7 @@ import time
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import desc, func, text
+from sqlalchemy import desc, func, text, case
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import requests
@@ -46,10 +46,16 @@ async def get_audit_log(
 def get_camera_nodes(user=Depends(is_police), db: Session = Depends(get_db)):
     online = is_camera_online()
 
+    # Normalize old fraction-scale (0-1) confidence scores to the current
+    # percentage scale before averaging — see analytics.py for why.
+    normalized_confidence = case(
+        (Alert.confidence_score <= 1, Alert.confidence_score * 100),
+        else_=Alert.confidence_score,
+    )
     stats = (
         db.query(
             func.count(Alert.id).label("detections"),
-            func.avg(Alert.confidence_score).label("avg_confidence"),
+            func.avg(normalized_confidence).label("avg_confidence"),
             func.max(Alert.detected_at).label("last_seen"),
         )
         .filter(Alert.camera_id == CAMERA_NODE_ID)

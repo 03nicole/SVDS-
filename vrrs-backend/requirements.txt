@@ -10,6 +10,9 @@ python-dotenv==1.0.1
 python-multipart==0.0.9
 pydantic[email]==2.7.1
 
+# Test suite (tests/) — not required to run the app itself
+pytest
+
 # Optional model / OCR dependencies (install only if integrating OCR/detection locally)
 ultralytics
 easyocr

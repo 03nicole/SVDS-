@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func, desc, extract
+from sqlalchemy import func, desc, extract, case
 from datetime import datetime, timedelta
 from app.database import get_db
 from app.models import Report, Alert, User, AuditLog
@@ -10,6 +10,15 @@ router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
 MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
 
+# Older detections (from a retired standalone OCR script) stored confidence as
+# a 0-1 fraction; the current camera-node stores it as a 0-100 percentage.
+# Averaging the raw column mixes both scales and skews the result low, so
+# every aggregate normalizes fractions to percentages first.
+NORMALIZED_CONFIDENCE = case(
+    (Alert.confidence_score <= 1, Alert.confidence_score * 100),
+    else_=Alert.confidence_score,
+)
+
 @router.get("/summary")
 async def get_summary(user=Depends(is_police), db: Session=Depends(get_db)):
     # Use aggregate counts on the primary key to avoid selecting possibly-missing columns
@@ -18,7 +27,7 @@ async def get_summary(user=Depends(is_police), db: Session=Depends(get_db)):
     found = db.query(func.count(Report.id)).filter(Report.status == "found").scalar() or 0
     review = db.query(func.count(Report.id)).filter(Report.status == "under_review").scalar() or 0
     unread = db.query(func.count(Alert.id)).filter(Alert.is_read == False).scalar() or 0
-    avg_confidence = db.query(func.avg(Alert.confidence_score)).scalar()
+    avg_confidence = db.query(func.avg(NORMALIZED_CONFIDENCE)).scalar()
     false_positives = db.query(func.count(AuditLog.id)).filter(AuditLog.action.ilike("%false positive%")).scalar() or 0
     total_users = db.query(func.count(User.id)).scalar() or 0
     police_users = db.query(func.count(User.id)).filter(User.role == "police").scalar() or 0
@@ -48,7 +57,7 @@ async def status_breakdown(user=Depends(is_police), db: Session=Depends(get_db))
 @router.get("/detections-per-node")
 async def detections_per_node(user=Depends(is_police), db: Session=Depends(get_db)):
     results = (db.query(Alert.camera_id, Alert.location_spotted,
-        func.count(Alert.id).label("total_detections"), func.avg(Alert.confidence_score).label("avg_confidence"))
+        func.count(Alert.id).label("total_detections"), func.avg(NORMALIZED_CONFIDENCE).label("avg_confidence"))
         .group_by(Alert.camera_id, Alert.location_spotted).order_by(desc("total_detections")).all())
     return [{"camera_id": r.camera_id, "location": r.location_spotted,
         "total_detections": r.total_detections, "avg_confidence": round(r.avg_confidence or 0, 1)} for r in results]
