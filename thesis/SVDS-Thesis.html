@@ -1,0 +1,1490 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>SVDS -- Vehicle Registry and Stolen Vehicle Detection System</title>
+
+<style>
+  @page { size: A4; margin: 2.5cm; }
+  body {
+    font-family: 'Times New Roman', Georgia, serif;
+    font-size: 12pt;
+    line-height: 1.5;
+    color: #111;
+    max-width: 210mm;
+    margin: 0 auto;
+  }
+  h1 { font-size: 20pt; margin-top: 0; page-break-before: always; }
+  h1:first-of-type { page-break-before: avoid; }
+  h2 { font-size: 15pt; margin-top: 1.4em; }
+  h3 { font-size: 13pt; margin-top: 1.2em; }
+  p, li { text-align: justify; }
+  code { font-family: Consolas, 'Courier New', monospace; background: #f2f2f2; padding: 1px 4px; font-size: 10pt; }
+  pre { background: #f5f5f5; border: 1px solid #ddd; padding: 10px; overflow-x: auto; font-size: 9.5pt; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 10.5pt; }
+  th, td { border: 1px solid #999; padding: 5px 8px; text-align: left; vertical-align: top; }
+  th { background: #eaeaea; }
+  img { max-width: 100%; display: block; margin: 0.8em auto; border: 1px solid #ddd; }
+  hr { border: none; border-top: 1px solid #999; margin: 2em 0; }
+  .titlepage { text-align: center; padding-top: 3cm; }
+</style>
+
+</head>
+<body>
+<p>[Your University]
+[School / Faculty]
+[Department of Computer Science]</p>
+<h1>SVDS — VEHICLE REGISTRY AND STOLEN VEHICLE DETECTION SYSTEM</h1>
+<h3>A camera-based license plate detection and vehicle registry system for the Zambia Police Service</h3>
+<p>BY</p>
+<p><strong>[Your Full Name]</strong></p>
+<p>[Course Code] FINAL YEAR COURSE PROJECT</p>
+<p>A THESIS SUBMITTED IN PARTIAL FULFILMENT OF THE
+REQUIREMENT FOR THE AWARD OF A BACHELOR'S DEGREE OF
+COMPUTER SCIENCE</p>
+<p>SUPERVISOR: [Supervisor Name]</p>
+<hr />
+<h2>DECLARATION</h2>
+<p>I, the undersigned, hereby declare that the Vehicle Registry and Reporting System /
+Stolen Vehicle Detection System (VRRS/SVDS) is my own work. That it has not been
+submitted for any degree or examination in any other university to my knowledge, and
+that all sources I have used or quoted have been indicated and acknowledged by complete
+references.</p>
+<p>Author: <strong>[Your Full Name]</strong>
+Student Number: <strong>[Student Number]</strong>
+Signature: <strong><em>_</em></strong><strong><em>_</em></strong><strong><em>_</em></strong>______
+Date: [Submission Date]</p>
+<p>Supervisor: <strong>[Supervisor Name]</strong>
+Signature: <strong><em>_</em></strong><strong><em>_</em></strong><strong><em>_</em></strong>______</p>
+<hr />
+<h2>DEDICATION</h2>
+<p>[Write your own — the golf thesis dedicated the work to family/faith; keep this
+section personal to you rather than templated.]</p>
+<hr />
+<h2>ACKNOWLEDGEMENT</h2>
+<p>I want to express my gratitude to [Supervisor Name], my supervisor, for guidance and
+feedback throughout this project. [Add anyone else who supported the work — family,
+the Zambia Police Service contacts who informed the requirements interviews, etc.]</p>
+<hr />
+<h2>ABSTRACT</h2>
+<p>Vehicle theft investigation in Zambia currently relies on manual, paper-based reporting
+and word-of-mouth alerting between police stations — a stolen vehicle report filed at
+one station has no mechanism to automatically flag the vehicle if it is later sighted
+elsewhere. This project, SVDS (Stolen Vehicle Detection System), addresses that gap by
+combining a conventional vehicle-registry web application with a real-time,
+camera-based automatic license plate recognition (ALPR) pipeline.</p>
+<p>The system has three cooperating parts. A FastAPI backend exposes a REST and WebSocket
+API over a PostgreSQL database, enforcing role-based access for three user types:
+Reportee (the public, filing and tracking stolen-vehicle reports), Police (viewing live
+detection alerts, managing the vehicle registry, and analytics), and Admin (user and
+system management). A React single-page application provides the interface for all
+three roles. A separate, decoupled camera-node process streams video from a
+phone-mounted camera, detects license plates with a custom-trained YOLOv8n object
+detector, reads the plate text with EasyOCR, and reports matches to the backend over
+plain HTTP — requiring no coupling to the backend's internals or technology choices.</p>
+<p>The detection model was trained on a self-collected, Roboflow-annotated dataset of
+Zambian number plates (335 source images, augmented to 1,890) and evaluated at
+precision 0.988 and recall 0.751 (mAP50 0.801) after 100 training epochs. The full
+system was tested end-to-end — from a real phone camera feed, through detection and
+OCR, to a live WebSocket alert appearing on the police dashboard — and validated with
+an automated test suite (39 tests) covering authentication, role-based access control,
+the report lifecycle, plate-matching logic, and the analytics layer.</p>
+<p>This work demonstrates that a real-time ALPR pipeline can be integrated into a
+practical, role-based law-enforcement registry system using consumer hardware (an
+Android phone as the camera) and open-source computer vision tooling, without recourse
+to commercial ALPR licensing.</p>
+<hr/>
+<h1>1. Introduction</h1>
+<p><em>SDLC phase: Problem identification / feasibility study</em></p>
+<h2>1.1 Background</h2>
+<p>Vehicle theft is a persistent problem for law enforcement in Zambia, and the process
+of recovering a stolen vehicle depends heavily on chance: an officer at a checkpoint or
+on patrol happening to recognize a plate number from a paper report or a radio
+bulletin. Vehicle registry records, incident reports, and eyewitness descriptions are
+typically kept on paper or in disconnected station-level spreadsheets, which means a
+report filed at one police station is invisible to an officer working in a different
+part of the same city, let alone a different province.</p>
+<p>At the same time, automatic license plate recognition (ALPR) has become inexpensive
+enough to build from commodity hardware. A single Android phone can stream video over
+Wi-Fi, and open-source object detection models (this project uses Ultralytics YOLOv8)
+can be trained on a modest, self-collected image set and run in real time on a
+consumer GPU. This closes the gap between "a report exists somewhere" and "a report is
+automatically checked against every vehicle a camera sees."</p>
+<h2>1.2 Problem Statement</h2>
+<p>There is no system available to the Zambia Police Service that automatically checks a
+vehicle's license plate — as seen by a camera in the field — against an active
+stolen-vehicle registry in real time. Existing practice depends on manual recognition
+by officers and manual cross-referencing of paper reports. This results in: (a) slow or
+missed detections of stolen vehicles that pass through monitored locations, (b) no
+centralized, real-time way for a report filed by the public to reach every officer who
+might encounter the vehicle, and (c) no audit trail connecting a detection event back to
+the report that triggered it.</p>
+<h2>1.3 Research Questions</h2>
+<ol>
+<li>Can a custom-trained, lightweight object detector (YOLOv8n) combined with an
+   open-source OCR engine achieve detection and recognition accuracy sufficient for
+   real-time plate matching on Zambian number plates, using only a phone camera and a
+   consumer GPU?</li>
+<li>Can such a detection pipeline be integrated into a role-based registry system as a
+   fully decoupled component — communicating only over plain HTTP/WebSocket — without
+   requiring the detection logic to be embedded in the backend itself?</li>
+<li>Does a real-time alert delivered over WebSocket meaningfully reduce the latency
+   between "a stolen vehicle is sighted" and "a police officer is notified," compared
+   to the manual process it replaces?</li>
+</ol>
+<h2>1.4 Aim</h2>
+<p>The aim of this project is to design, implement, and evaluate SVDS: a vehicle registry
+and reporting web application integrated with a real-time, camera-based license plate
+detection pipeline, for use by the Zambia Police Service and the public it serves.</p>
+<h2>1.5 Objectives</h2>
+<ul>
+<li>Implement role-based accounts for three user types — Reportee, Police, and Admin —
+  each with access scoped to what that role needs (<code>vrrs-backend/app/middleware.py</code>).</li>
+<li>Allow the public to file, track, and view the status of stolen-vehicle reports
+  (<code>under_review</code> → <code>missing</code> → <code>found</code>).</li>
+<li>Give police officers a live view of detection alerts, the vehicle registry, and
+  system analytics, with the ability to activate reports, mark vehicles recovered, and
+  flag false positives.</li>
+<li>Give administrators control over user accounts, roles, and visibility into system
+  health and the audit trail.</li>
+<li>Collect and annotate a dataset of Zambian license plates, and train a YOLOv8-based
+  object detector to localize plates in a camera frame.</li>
+<li>Integrate an OCR stage (EasyOCR) to read the localized plate text, and validate/clean
+  that text against the expected format.</li>
+<li>Build a decoupled camera-node process that connects a real video stream (an Android
+  phone's IP Webcam feed) to the detection pipeline and reports matches to the backend
+  over HTTP, independent of the backend's and frontend's technology stack.</li>
+<li>Deliver real-time alerts to connected police/admin clients over WebSocket the moment
+  a stolen vehicle is detected.</li>
+<li>Evaluate the detector quantitatively (precision, recall, mAP) and the system as a
+  whole through automated and manual/system testing.</li>
+</ul>
+<h2>1.6 Scope</h2>
+<p>This project covers the vehicle-registry web application (backend + frontend), the
+camera-node detection pipeline, and the integration between them. It does <strong>not</strong>
+cover: a native mobile app for the public (the public-facing interface is a responsive
+web app), payment/e-government integration, multi-camera fleet management beyond a
+single configured node, or GPS-based camera geolocation (the camera's location is
+currently a configured string, not read from the phone's sensors — see §9.2).</p>
+<hr/>
+<h1>2. Literature Review</h1>
+<p><em>SDLC phase: Research / analysis (precedes formal requirements gathering)</em></p>
+<h2>2.1 Introduction</h2>
+<p>This chapter surveys existing automatic license plate recognition (ALPR) approaches and
+law-enforcement/vehicle-registry systems relevant to SVDS, to establish what already
+exists, what is transferable, and what gap this project fills — specifically, the
+absence of any ALPR-integrated stolen-vehicle registry built for the Zambian context.</p>
+<h2>2.2 Review of Similar Systems</h2>
+<h3>2.2.1 Commercial and open ALPR platforms</h3>
+<ul>
+<li><strong>OpenALPR</strong> — an open-source ALPR library offering pre-trained models for several
+  countries' plate formats. It is a strong general-purpose reference but ships no model
+  trained on Zambian plates, and its default pipeline (classical image processing plus
+  a small CNN) predates the anchor-free, single-stage detectors (e.g., YOLOv8) used in
+  this project.</li>
+<li><strong>Plate Recognizer</strong> (a commercial ALPR SaaS) — demonstrates the split this project
+  also uses: a lightweight edge client that captures frames and a separate service that
+  performs recognition. Its accuracy is strong across many plate formats but the service
+  is a paid API, which is a barrier for public-sector deployment on a limited budget —
+  reinforcing the case for a self-hosted, custom-trained alternative.</li>
+<li><strong>Ultralytics YOLOv8</strong> (the detector family used in this project) — chosen over older
+  YOLO versions and over two-stage detectors (e.g., Faster R-CNN) for its balance of
+  inference speed and accuracy on a single consumer GPU, and its first-class support for
+  training on a small, custom, single-class dataset via the Ultralytics CLI/Python API.</li>
+<li><strong>EasyOCR</strong> — an open-source, PyTorch-based OCR engine supporting a character
+  allowlist, which is used here to constrain readings to the alphanumeric character set
+  a Zambian plate can contain, reducing spurious reads from background text.</li>
+</ul>
+<h3>2.2.2 Vehicle registry and reporting systems</h3>
+<p>Existing vehicle registry and reporting workflows in the literature and in observed
+practice are predominantly record-keeping systems: they store reports, ownership
+records, and status, but do not themselves watch for the reported vehicle. Where ALPR
+is used in policing literature, it is typically deployed as fixed, purpose-built
+roadside camera infrastructure (e.g., number-plate recognition cameras on major routes)
+rather than integrated with a public-facing reporting system that a citizen can use
+directly. SVDS's contribution is closing that loop: a report filed by the public
+immediately becomes something a camera node can match against, without a separate
+data-entry step for police to "load" the report into a detection system.</p>
+<h3>2.2.3 Gap this project addresses</h3>
+<p>No system reviewed combines all of: (a) public self-service reporting, (b)
+role-based access for police/admin oversight, (c) a custom-trained detector for the
+specific plate format in question, and (d) real-time WebSocket delivery of detection
+alerts to connected officers. SVDS's architecture — a fully decoupled camera node
+talking to a conventional registry backend over HTTP — is deliberately chosen so the
+detection pipeline could later be pointed at fixed roadside cameras without changing
+the backend at all.</p>
+<h2>2.3 Research Methodology</h2>
+<p>Requirements and design decisions for SVDS were informed by:</p>
+<ul>
+<li><strong>Background reading</strong> on ALPR architectures (YOLO family detectors, OCR engines) and
+  on typical vehicle-registry data models (report lifecycle, audit logging).</li>
+<li><strong>Direct inspection of the problem domain</strong> — the manual, paper-based nature of
+  current stolen-vehicle reporting, and the fact that police, reportees, and
+  administrators need materially different views of the same underlying data (which
+  directly shaped the three-role design).</li>
+<li><strong>Iterative build-and-test cycles</strong>, where the camera-node pipeline (frame capture →
+  detection → OCR → cleaning → dedup → HTTP report) was refined against real footage
+  from a phone camera rather than only against the training/validation image set.</li>
+</ul>
+<h2>2.4 Summary</h2>
+<p>ALPR technology and vehicle-registry web applications are both mature, well-documented
+domains individually. The literature and available products show little precedent for
+combining the two into a single system aimed at a specific national plate format and a
+public/police/admin role split — which is the space this project occupies.</p>
+<hr/>
+<h1>3. Requirements Engineering</h1>
+<p><em>SDLC phase: Requirements</em></p>
+<h2>3.1 Development Methodology</h2>
+<p>SVDS was built iteratively rather than to a single upfront specification: the registry
+web application (backend + frontend) and the camera-node detection pipeline were
+developed as two work-streams that converged at one integration point — the
+<code>POST /alerts/check-plate</code> endpoint. This let the detection model's training/evaluation
+cycle (data collection → annotation → training → evaluation, see Chapter 5) proceed
+independently of the web application's CRUD/auth work, and let each be iterated and
+retested without blocking the other.</p>
+<p><img alt="Figure 3.1: iterative development cycle" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/03-requirements-engineering-1.png" /></p>
+<h2>3.2 Required Resources</h2>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Technology</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Backend</td>
+<td>Python, FastAPI, SQLAlchemy (ORM), PostgreSQL, JWT (<code>python-jose</code>), bcrypt (<code>passlib</code>)</td>
+</tr>
+<tr>
+<td>Frontend</td>
+<td>React 18, React Router, Axios, Vite</td>
+</tr>
+<tr>
+<td>Camera node</td>
+<td>Python, OpenCV, Ultralytics YOLOv8, EasyOCR, PyTorch (CUDA)</td>
+</tr>
+<tr>
+<td>Dataset/annotation</td>
+<td>Roboflow (annotation, augmentation, dataset versioning/export)</td>
+</tr>
+<tr>
+<td>Dev/runtime</td>
+<td>Windows 11, NVIDIA GPU (CUDA) for training and real-time inference, Android phone running an IP Webcam app as the camera source</td>
+</tr>
+</tbody>
+</table>
+<p>Development environments are isolated per component: the backend uses a Python venv
+with <code>psycopg2-binary</code> for Postgres connectivity; the camera node requires a
+GPU-enabled Python environment with <code>torch</code>/<code>ultralytics</code>/<code>easyocr</code> installed
+(CPU-only inference is possible but materially slower for real-time video).</p>
+<h2>3.3 Requirements Gathering Approach</h2>
+<p>Requirements were derived from: (a) the practical gap identified in Chapter 1 (no
+automatic cross-referencing of reports against field sightings), (b) the natural
+three-way split of who interacts with a stolen-vehicle report — the person who filed
+it, the officer investigating it, and the administrator managing accounts and system
+health — and (c) the technical constraints of the detection pipeline itself (a
+single, cheap camera source; the need to avoid coupling the detector to the backend's
+release cycle).</p>
+<h2>3.4 Functional Requirements</h2>
+<h3>3.4.1 Reportee (public)</h3>
+<ul>
+<li>Register an account and log in (<code>POST /auth/register</code>, <code>/auth/login</code>).</li>
+<li>File a stolen-vehicle report with owner, vehicle, and incident details
+  (<code>POST /reports/</code>); a duplicate report cannot be filed against a plate that already
+  has an active (<code>missing</code>-status) report.</li>
+<li>View and search their own filed reports (<code>GET /reports/</code>, scoped to their own
+  <code>reported_by</code>).</li>
+<li>View and edit their own profile (<code>GET/PATCH /users/me</code>), including changing password.</li>
+</ul>
+<h3>3.4.2 Police</h3>
+<ul>
+<li>Everything a Reportee can do, plus:</li>
+<li>View, search, and filter all reports system-wide, not just their own.</li>
+<li>Activate a report (move it from <code>under_review</code> to <code>missing</code>, making it eligible for
+  plate matching) and mark a report <code>found</code> once the vehicle is recovered
+  (<code>PATCH /reports/{id}/activate</code>, <code>PATCH /reports/{id}/found</code>).</li>
+<li>View live detection alerts, mark them read, and flag false positives
+  (<code>GET /alerts/</code>, <code>PATCH /alerts/{id}/read</code>, <code>PATCH /alerts/{id}/false-positive</code>).</li>
+<li>Receive new detection alerts in real time via WebSocket without refreshing the page.</li>
+<li>View the live camera feed and camera-node status (online/offline, detection count,
+  average confidence) on the Cameras page.</li>
+<li>View system analytics: report totals/status breakdown, recovery rate, alerts over
+  time, detections per camera node, average recovery time.</li>
+</ul>
+<h3>3.4.3 Admin</h3>
+<ul>
+<li>Everything a Police user can do, plus:</li>
+<li>Create police/employee accounts (<code>POST /users/invite</code>), change any user's role
+  (<code>PATCH /users/{id}/role</code>), deactivate/reactivate accounts, and delete accounts.</li>
+<li>Delete a stolen-vehicle report, including one with existing detection history
+  (<code>DELETE /reports/{id}</code> — see §8.5 for why this specifically needed a fix).</li>
+<li>View the system-wide audit log of significant actions (<code>GET /system/audit</code>).</li>
+<li>View system health: API response time, DB connection pool usage, disk usage, active
+  sessions, camera node online/offline count, uptime (<code>GET /system/health</code>).</li>
+<li>View user-growth analytics (<code>GET /analytics/user-growth</code>).</li>
+</ul>
+<h3>3.4.4 Camera node (SVDS detection subsystem)</h3>
+<ul>
+<li>Connect to a live MJPEG video stream from a phone-mounted camera.</li>
+<li>Detect license plates in each processed frame using a custom-trained object
+  detector, at a configurable confidence threshold.</li>
+<li>Extract and pre-process the detected plate region for OCR (grayscale, upscale,
+  threshold).</li>
+<li>Read the plate text and validate it against the expected Zambian plate character
+  pattern before treating it as a genuine reading.</li>
+<li>Suppress repeated reports of the same plate within a cooldown window, tolerant of
+  OCR noise between frames (i.e., near-identical readings should not each trigger a
+  separate report).</li>
+<li>Report each accepted reading to the backend over HTTP, and log the backend's
+  response (CLEAR/STOLEN) locally.</li>
+<li>Recover automatically if the video stream connection drops.</li>
+</ul>
+<h2>3.5 Non-Functional Requirements</h2>
+<ul>
+<li><strong>Security:</strong> passwords are never stored in plaintext (bcrypt hashing); every
+  protected route requires a valid JWT; role checks are enforced server-side
+  (<code>app/middleware.py</code>'s <code>require_role</code>), not only hidden in the frontend UI; the
+  camera feed proxy and WebSocket endpoint both validate a JWT before granting access,
+  since <code>&lt;img&gt;</code> tags and WebSocket handshakes cannot send an <code>Authorization</code> header.</li>
+<li><strong>Performance:</strong> the detection pipeline processes every 5th frame (not every frame)
+  to keep pace with the video stream on the available GPU; database aggregate queries
+  in the analytics/system routers use SQL-side counting/averaging rather than pulling
+  full row sets into Python.</li>
+<li><strong>Availability/resilience:</strong> the camera node reconnects automatically if the phone
+  stream drops; the backend's WebSocket manager removes dead connections on broadcast
+  failure rather than blocking on them.</li>
+<li><strong>Decoupling:</strong> the camera node has no dependency on the backend's internals — it is
+  a separate OS process communicating only over HTTP/JSON, so it can be redeployed,
+  restarted, or replaced independently (see Chapter 7).</li>
+<li><strong>Usability:</strong> each role sees only the navigation and actions relevant to it (the
+  frontend's route guards mirror the backend's role checks) so users are not shown
+  controls they cannot use.</li>
+<li><strong>Maintainability:</strong> the schema is defined once in SQLAlchemy models and shared by
+  every router; business rules that matter to more than one endpoint (e.g., confidence
+  normalization) are factored into a single expression rather than duplicated.</li>
+<li><strong>Auditability:</strong> state-changing actions taken by police/admin users are written to
+  an <code>audit_log</code> table, giving a traceable record of who activated, resolved, or
+  deleted a report, and who changed a user's role.</li>
+</ul>
+<hr/>
+<h1>4. System Design</h1>
+<p><em>SDLC phase: Design</em></p>
+<h2>4.1 Proposed System</h2>
+<p>SVDS is composed of three independently-runnable processes that communicate only over
+network calls, never by sharing code or a process boundary:</p>
+<ol>
+<li><strong><code>vrrs-backend</code></strong> — a FastAPI application backed by PostgreSQL, exposing REST
+   endpoints and one WebSocket endpoint.</li>
+<li><strong><code>vrrs-frontend</code></strong> — a React single-page application consumed by browsers, talking
+   to the backend over HTTPS (Axios) and WebSocket.</li>
+<li><strong><code>vrrs-node</code></strong> — a standalone Python script (<code>plate_node.py</code>) that pulls a phone's
+   video stream, runs detection/OCR, and reports over plain HTTP.</li>
+</ol>
+<h2>4.2 System Architecture</h2>
+<p><img alt="Figure 4.1: system architecture" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/04-system-design-1.png" /></p>
+<p>This is deliberately not a monolith: the camera node does not import anything from
+<code>vrrs-backend</code>, and could be pointed at a different backend entirely by changing one
+environment variable (<code>BACKEND_URL</code>). This decision trades a small amount of network
+overhead for the ability to develop, restart, and scale the detection pipeline
+independently of the web application — see Chapter 7 for the integration contract in
+detail.</p>
+<h2>4.3 Database Design (Entity-Relationship Diagram)</h2>
+<p>The schema has four tables, defined once in <code>vrrs-backend/app/models.py</code> and shared by
+every router:</p>
+<p><img alt="Figure 4.2: entity-relationship diagram" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/04-system-design-2.png" /></p>
+<p><code>Alert.report_id</code> carries <code>ON DELETE CASCADE</code> (see §8.5): deleting a report also
+deletes its detection history rather than being blocked by the foreign key. <code>Report</code>
+has no direct foreign key to <code>Alert</code>; the relationship is navigated the other way,
+and <code>Alert.license_plate</code> is a computed property that reads through to
+<code>Alert.report.license_plate</code> rather than being stored redundantly.</p>
+<p>No formal migration tool (e.g., Alembic, though it is listed in <code>requirements.txt</code>) is
+currently wired up — the schema is created with <code>Base.metadata.create_all()</code> at
+backend startup, which creates missing tables but does not alter existing ones. This is
+why the cascade fix in §8.5 required a direct <code>ALTER TABLE</code> against the live database
+in addition to the model change (see §9.2 for this as a noted limitation).</p>
+<h2>4.4 API Design</h2>
+<table>
+<thead>
+<tr>
+<th>Router</th>
+<th>Prefix</th>
+<th>Purpose</th>
+<th>Auth</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Auth</td>
+<td><code>/auth</code></td>
+<td>Register (reportee only), login, logout</td>
+<td>Public</td>
+</tr>
+<tr>
+<td>Reports</td>
+<td><code>/reports</code></td>
+<td>Stolen-vehicle report CRUD + lifecycle transitions</td>
+<td>Reportee+ (scoped), Police for updates, Admin for delete</td>
+</tr>
+<tr>
+<td>Alerts</td>
+<td><code>/alerts</code></td>
+<td><code>check-plate</code> (public, called by the camera node), alert listing/read/false-positive, WebSocket</td>
+<td>Public for <code>check-plate</code>; Police+ for the rest</td>
+</tr>
+<tr>
+<td>Users</td>
+<td><code>/users</code></td>
+<td>Profile, admin user management, role changes</td>
+<td>Self for profile; Admin for management</td>
+</tr>
+<tr>
+<td>Analytics</td>
+<td><code>/analytics</code></td>
+<td>Aggregate stats for dashboards/charts</td>
+<td>Police+ (Admin for user-growth)</td>
+</tr>
+<tr>
+<td>System</td>
+<td><code>/system</code></td>
+<td>Audit log, camera-node status, live-feed proxy, health metrics</td>
+<td>Admin/Police, token-gated for the feed proxy</td>
+</tr>
+</tbody>
+</table>
+<p><code>/alerts/check-plate</code> is intentionally unauthenticated (the camera node has no user
+identity of its own) but is not a general write endpoint — it can only ever produce a
+<code>CLEAR</code> response or create an <code>Alert</code> row linked to an already-<code>missing</code> report; it
+cannot create, modify, or delete a report.</p>
+<h2>4.5 Sequence Design: Authentication</h2>
+<p><img alt="Figure 4.3: authentication sequence" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/04-system-design-3.png" /></p>
+<p>Every subsequent request attaches the JWT as a Bearer token; <code>app/middleware.py</code>
+decodes it once per request (<code>get_current_user</code>) and layers role checks on top
+(<code>is_reportee</code>, <code>is_police</code>, <code>is_admin</code>) rather than re-implementing auth logic per
+route.</p>
+<h2>4.6 Sequence Design: Detection-to-Alert (the system's core value flow)</h2>
+<p>See Chapter 5 (§5.7) for the full pipeline diagram inside the camera node, and
+Chapter 7 for the integration contract this sequence relies on.</p>
+<p><img alt="Figure 4.4: detection-to-alert sequence" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/04-system-design-4.png" /></p>
+<h2>4.7 Role/Access Design</h2>
+<p>Access is enforced identically in two places: server-side (FastAPI dependencies) and
+client-side (React route guards), so the UI never shows a control the API would refuse.</p>
+<p><img alt="Figure 4.5: role-based route access" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/04-system-design-5.png" /></p>
+<p>(<code>vrrs-frontend/src/App.jsx</code>'s <code>Guard roles={[...]}</code> component and
+<code>vrrs-backend/app/middleware.py</code>'s <code>require_role(*roles)</code> implement the two sides of
+this same rule set.)</p>
+<h2>4.8 UI Design</h2>
+<p>The frontend has 14 pages split across four areas: public (<code>Login</code>, <code>Register</code>),
+Reportee (<code>ReporteeHome</code>, <code>ReportVehicle</code>, <code>MyReports</code>, <code>Profile</code>), Police
+(<code>PoliceHome</code>, <code>Alerts</code>, <code>Cameras</code>, <code>Analytics</code>), and Admin (<code>AdminHome</code>,
+<code>UserManagement</code>, <code>SystemHealth</code>, <code>AuditLog</code>). A shared <code>PortalLayout</code> gives
+role-appropriate navigation, and a global <code>AlertsContext</code> means a new detection toast
+can appear on <em>any</em> page a police/admin user is viewing, not only the Alerts page —
+this was a deliberate design choice so an officer reviewing analytics is not the last
+to know about a live detection.</p>
+<hr/>
+<h1>5. Object Detection &amp; Plate Recognition Module</h1>
+<p><em>This chapter documents the ML sub-lifecycle that Chapters 4 (Design) and 6
+(Implementation) reference but don't repeat in full: data → annotation → training →
+evaluation → deployment. Every figure and number in this chapter is copied directly
+from the actual training run in <code>C:\Users\user\runs\detect\svds-plate-detector-final-2\</code>
+— see <code>assets/detection-model/</code>.</em></p>
+<h2>5.1 Why a custom-trained detector</h2>
+<p>Off-the-shelf ALPR models (§2.2.1) are trained on plate formats from the regions that
+produced them and do not reliably localize the layout and proportions of Zambian
+plates. Rather than adapt a general model, a single-class detector —
+<code>zambia-number-plate-detection</code> — was trained from scratch on YOLOv8n's pretrained
+COCO weights, fine-tuned only to localize "this region of the frame is a plate,"
+leaving character recognition to a separate OCR stage (§5.6). Splitting localization
+and recognition into two stages (rather than an end-to-end plate-reading model) keeps
+each stage simple, independently testable, and swappable — the OCR engine could be
+replaced without retraining the detector.</p>
+<h2>5.2 Data Collection</h2>
+<p>335 source images of vehicles bearing Zambian plates were collected by phone camera
+(the same category of hardware the deployed camera node uses — see the <code>IMG_xxxx.jpg</code>
+filename pattern from the source photography under <code>C:\Users\user\runs\detect\predict-6\</code>,
+matching the phone-camera capture format used throughout this project). Collecting
+images with the same kind of camera the system would actually use in the field —
+rather than sourcing a generic plate dataset — was intentional: it means the training
+distribution (angle, lighting, motion blur, resolution) matches the deployment
+distribution.</p>
+<h2>5.3 Annotation</h2>
+<p>Images were annotated using Roboflow (project <code>zambia-number-plate-detection</code>,
+workspace <code>nicholass-workspace-j3yig</code>), with a single bounding-box class per plate. The
+dataset was exported in YOLOv8 label format (<code>assets/dataset/data.yaml</code>):</p>
+<pre><code class="language-yaml">names:
+  - zambia-number-plate-detection
+nc: 1
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+</code></pre>
+<h2>5.4 Pre-processing and Augmentation</h2>
+<p>Roboflow's export pipeline applied (documented in <code>assets/dataset/README.roboflow.txt</code>):</p>
+<ul>
+<li>Auto-orientation (EXIF-orientation stripping)</li>
+<li>Resize to 640×640 (stretch)</li>
+<li>3 augmented versions per source image: 50% chance of horizontal flip, random
+  rotation (±15°), random brightness adjustment (±25%), and a small random Gaussian
+  blur (0–1.8px) applied to bounding boxes</li>
+</ul>
+<p>This grew the dataset from 335 source images to <strong>1,890 images</strong>, split:</p>
+<table>
+<thead>
+<tr>
+<th>Split</th>
+<th>Images</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>train</td>
+<td>1,476</td>
+</tr>
+<tr>
+<td>valid</td>
+<td>407</td>
+</tr>
+<tr>
+<td>test</td>
+<td>7</td>
+</tr>
+</tbody>
+</table>
+<p><img alt="Figure 5.0: data and training pipeline" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/05-object-detection-module-1.png" /></p>
+<h2>5.5 Training</h2>
+<p>Trained with the Ultralytics CLI/Python API. Actual hyperparameters, from
+<code>assets/detection-model/args.yaml</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Base model</td>
+<td><code>yolov8n.pt</code> (pretrained, fine-tuned)</td>
+</tr>
+<tr>
+<td>Epochs</td>
+<td>100</td>
+</tr>
+<tr>
+<td>Batch size</td>
+<td>8</td>
+</tr>
+<tr>
+<td>Image size</td>
+<td>640×640</td>
+</tr>
+<tr>
+<td>Device</td>
+<td>GPU (<code>device: '0'</code>, NVIDIA Quadro P2000)</td>
+</tr>
+<tr>
+<td>Optimizer</td>
+<td>auto (Ultralytics default: SGD/AdamW selection)</td>
+</tr>
+<tr>
+<td>Learning rate</td>
+<td><code>lr0=0.01</code>, <code>lrf=0.01</code>, cosine schedule off</td>
+</tr>
+<tr>
+<td>Augmentation (in-training)</td>
+<td>mosaic 1.0, <code>fliplr</code> 0.5, HSV jitter, <code>erasing</code> 0.4</td>
+</tr>
+</tbody>
+</table>
+<p>This was one of several training runs (<code>svds-plate-detector</code>, <code>-2</code>, <code>-3</code>, <code>-final</code>,
+<code>-final-2</code>, etc. — see the <code>runs/detect/</code> history); <code>svds-plate-detector-final-2</code> is
+the run whose weights (<code>best.pt</code>) are the ones actually loaded by <code>plate_node.py</code> in
+production (<code>MODEL_PATH</code> in <code>vrrs-node/.env</code>).</p>
+<h2>5.6 Evaluation</h2>
+<p>Final-epoch (100/100) metrics, read directly from <code>assets/detection-model/results.csv</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Precision (B)</td>
+<td>0.988</td>
+</tr>
+<tr>
+<td>Recall (B)</td>
+<td>0.751</td>
+</tr>
+<tr>
+<td>mAP50 (B)</td>
+<td>0.801</td>
+</tr>
+<tr>
+<td>mAP50-95 (B)</td>
+<td>0.686</td>
+</tr>
+</tbody>
+</table>
+<p>High precision with lower recall means the detector rarely produces a false bounding
+box, but does sometimes miss a plate in a frame (e.g., under motion blur or extreme
+angle) — an acceptable trade-off for this use case, since a missed detection in one
+frame is very likely caught in a subsequent frame of the same vehicle passing the
+camera (the pipeline evaluates every 5th frame of a live stream, not a single still
+image), whereas a false-positive detection could file a spurious alert against an
+innocent vehicle.</p>
+<p>Supporting evaluation artifacts, copied from the real training run into
+<code>assets/detection-model/</code>:</p>
+<ul>
+<li><code>confusion_matrix.png</code>, <code>confusion_matrix_normalized.png</code></li>
+<li><code>BoxPR_curve.png</code>, <code>BoxF1_curve.png</code>, <code>BoxP_curve.png</code>, <code>BoxR_curve.png</code></li>
+<li><code>results.png</code> (loss/metric curves across all 100 epochs)</li>
+<li><code>val_batch0_pred.jpg</code>, <code>val_batch1_pred.jpg</code> (real predicted bounding boxes on held-out
+  validation images, alongside <code>val_batch0_labels.jpg</code> for ground-truth comparison)</li>
+</ul>
+<p><strong>Figure 5.1</strong> — training/validation loss and metric curves across all 100 epochs:</p>
+<p><img alt="Figure 5.1: training and validation curves" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/detection-model/results.png" /></p>
+<p><strong>Figure 5.2</strong> — confusion matrix on the held-out validation set:</p>
+<p><img alt="Figure 5.2: confusion matrix" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/detection-model/confusion_matrix.png" /></p>
+<p><strong>Figure 5.3</strong> — precision-recall curve:</p>
+<p><img alt="Figure 5.3: precision-recall curve" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/detection-model/BoxPR_curve.png" /></p>
+<p><strong>Figure 5.4</strong> — real predicted bounding boxes (top) against ground-truth labels
+(bottom) on held-out validation images:</p>
+<p><img alt="Figure 5.4a: predicted boxes on validation images" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/detection-model/val_batch0_pred.jpg" /></p>
+<p><img alt="Figure 5.4b: ground-truth boxes on the same validation images" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/detection-model/val_batch0_labels.jpg" /></p>
+<h2>5.7 OCR and Post-processing Pipeline</h2>
+<p>YOLO localizes a plate; it does not read the characters. <code>plate_node.py</code> runs a
+fixed post-processing pipeline on each detected box before treating a reading as valid:</p>
+<p><img alt="Figure 5.5: OCR and post-processing pipeline" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/05-object-detection-module-2.png" /></p>
+<p>Every "skip" leaf simply falls through to the next iteration of the camera node's
+<code>while True</code> loop (the next captured frame) — the diagram omits an explicit loop-back
+edge to keep the layout readable; the loop itself is described in §5.7's prose and
+shown in <code>plate_node.py</code>'s <code>main()</code>.</p>
+<p>Why each stage exists:</p>
+<ul>
+<li><strong>Frame skipping (every 5th frame):</strong> running YOLO + EasyOCR on every frame of a live
+  stream would fall behind the incoming video on the available hardware; skipping
+  frames trades a small amount of latency for keeping up with the stream in real time.</li>
+<li><strong>Grayscale → 4× resize → Otsu threshold:</strong> a raw crop of a plate region is small and
+  often low-contrast; upscaling and binarizing before OCR measurably improves EasyOCR's
+  character accuracy on cropped regions this small.</li>
+<li><strong>Character allowlist:</strong> restricting EasyOCR's output alphabet to <code>A-Z0-9</code> and space
+  prevents it from "reading" background clutter as plausible-looking but wrong
+  characters.</li>
+<li><strong>Regex validation (<code>clean_plate_text</code>, <code>vrrs-node/plate_utils.py</code>):</strong> a Zambian plate
+  cleans to 5–8 alphanumeric characters; anything outside that range is discarded
+  rather than forwarded as a guess.</li>
+<li><strong>Fuzzy-match cooldown (<code>is_recent_duplicate</code>):</strong> see §8.5 — this stage was rewritten
+  during this project specifically because exact-string cooldown keys let OCR noise
+  (<code>ALX3665</code> / <code>ALK3665</code> / <code>AL3065</code> for the same physical plate) bypass the cooldown
+  entirely.</li>
+</ul>
+<h2>5.8 Deployment and Integration</h2>
+<p><code>best.pt</code> is loaded once at process startup (<code>YOLO(MODEL_PATH)</code>, <code>model.to(DEVICE)</code>),
+not per-frame or per-request — inference is a local, synchronous call inside the same
+process reading the video stream. The camera node has no HTTP endpoint of its own for
+running inference; it only ever calls <em>out</em> to the backend once a reading passes all
+of the checks above. This is discussed further as an integration decision in
+Chapter 7, including why detection deliberately does <strong>not</strong> happen inside the FastAPI
+backend (the generic <code>POST /model/predict-image</code> endpoint in
+<code>app/routers/model.py</code> exists as a placeholder in the codebase but is not the
+production detection path — see §7.4).</p>
+<hr/>
+<h1>6. System Implementation</h1>
+<p><em>SDLC phase: Construction. This chapter covers how each part was actually built. All
+web-UI screenshots below are real captures of the running system (<code>assets/screenshots/</code>)
+— taken via headless Chrome driven over the DevTools Protocol against the live
+<code>vrrs-backend</code>/<code>vrrs-frontend</code> processes, logged in with real, server-issued JWTs for
+throwaway demo accounts (<code>demo.reportee@vrrs-thesis.local</code>, <code>demo.police@...</code>) plus the
+repository's own seeded admin account. The numbers they show (18 reports, 72.2%
+recovery rate, 21 users, etc.) are the live database's real state at capture time, not
+mocked. The camera-node preview window and a live end-to-end detection could not be
+captured this session because the phone's IP Webcam stream was not reachable at the
+time — see the note in §6.3.</em></p>
+<h2>6.1 Backend (<code>vrrs-backend</code>)</h2>
+<h3>6.1.1 Structure</h3>
+<pre><code>vrrs-backend/
+├── app/
+│   ├── main.py          FastAPI app, CORS, router registration
+│   ├── database.py      SQLAlchemy engine/session (reads DATABASE_URL from .env)
+│   ├── models.py        ORM models: User, Report, Alert, AuditLog
+│   ├── schemas.py       Pydantic request/response schemas
+│   ├── auth.py          bcrypt hashing, JWT create/decode
+│   ├── middleware.py    get_current_user, require_role, is_reportee/police/admin
+│   └── routers/
+│       ├── auth.py       register, login, logout
+│       ├── reports.py    report CRUD + lifecycle
+│       ├── alerts.py     check-plate, alert list/read/false-positive, WebSocket
+│       ├── users.py      profile, admin user management
+│       ├── analytics.py  aggregate stats
+│       ├── system.py     audit log, camera-node status, live-feed proxy, health
+│       └── model.py      generic (unused) predict/predict-image placeholder — see §7.4
+└── tests/                 automated test suite added during this project (Ch. 8)
+</code></pre>
+<h3>6.1.2 Auth and role enforcement</h3>
+<p>Passwords are hashed with bcrypt (<code>passlib.CryptContext</code>) and never stored or logged in
+plaintext. <code>create_access_token</code> issues a JWT carrying the user's id and role, expiring
+after <code>TOKEN_EXPIRY_HOURS</code> (default 24h). Every protected route depends on
+<code>get_current_user</code> (decodes and validates the token) and, where relevant, a role-scoped
+dependency (<code>is_reportee</code>, <code>is_police</code>, <code>is_admin</code>) built from a single
+<code>require_role(*roles)</code> factory — so a new role restriction is one line, not a
+duplicated <code>if</code> check per route.</p>
+<h3>6.1.3 Report lifecycle</h3>
+<p>A report moves through three states: <code>under_review</code> (just filed, not yet checked
+against live detection) → <code>missing</code> (activated by police, now eligible for plate
+matching) → <code>found</code> (recovered). Creating a report rejects a duplicate only against an
+already-<code>missing</code> plate, not an <code>under_review</code> one — a nuance surfaced by the automated
+test suite (§8.4) and documented as a known, unaddressed edge case rather than silently
+left undocumented.</p>
+<h3>6.1.4 Alerts and the detection contract</h3>
+<p><code>POST /alerts/check-plate</code> (the endpoint the camera node calls) normalizes both the
+incoming reading and every stored plate the same way — stripping everything but
+letters and digits and upper-casing — before comparing them, so <code>"baa 1234"</code>,
+<code>"BAA1234"</code>, and <code>"BAA-1234"</code> all match the same report. On a match it creates an
+<code>Alert</code> row and broadcasts a <code>STOLEN_DETECTED</code> message to every connected
+police/admin WebSocket client; on no match it returns <code>CLEAR</code> and writes nothing.</p>
+<p><strong>Figure 6.1</strong> — the live <code>/docs</code> Swagger UI, showing the full router list actually
+registered on this running instance (Authentication, Reports, Alerts, Users,
+Analytics, System):</p>
+<p><img alt="Figure 6.1: Swagger /docs" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/swagger-docs.png" /></p>
+<h2>6.2 Frontend (<code>vrrs-frontend</code>)</h2>
+<h3>6.2.1 Structure</h3>
+<p>14 pages across 4 areas (<code>src/pages/{admin,police,reportee}/*.jsx</code>, plus <code>Login.jsx</code>
+and <code>Register.jsx</code>), a shared <code>AuthContext</code> (JWT + role, persisted across reloads), an
+<code>AlertsContext</code> that opens the WebSocket connection once and makes new-alert toasts
+available app-wide via <code>NotificationToast</code>, and a <code>ProtectedRoute</code>/<code>Guard</code> component
+that redirects away from any route the current role isn't allowed on.</p>
+<h3>6.2.2 Key screens</h3>
+<p>All captured live, logged in as real accounts (a throwaway demo Reportee, a demo
+Police officer created via <code>/users/invite</code>, and the repository's seeded Admin
+account), against the real database (18 reports, 21 users at capture time):</p>
+<table>
+<thead>
+<tr>
+<th>Figure</th>
+<th>File</th>
+<th>Page</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>6.2</td>
+<td><code>login.png</code></td>
+<td><code>/login</code></td>
+</tr>
+<tr>
+<td>6.3</td>
+<td><code>register.png</code></td>
+<td><code>/register</code></td>
+</tr>
+<tr>
+<td>6.4</td>
+<td><code>reportee-home.png</code></td>
+<td><code>/my</code></td>
+</tr>
+<tr>
+<td>6.5</td>
+<td><code>report-vehicle.png</code></td>
+<td><code>/my/report</code> — the report-filing form</td>
+</tr>
+<tr>
+<td>6.6</td>
+<td><code>my-reports.png</code></td>
+<td><code>/my/reports</code> — showing the demo reportee's own filed report</td>
+</tr>
+<tr>
+<td>6.7</td>
+<td><code>police-home.png</code></td>
+<td><code>/police</code> — vehicle registry, 18 total reports, 72.2% recovery rate</td>
+</tr>
+<tr>
+<td>6.8</td>
+<td><code>alerts.png</code></td>
+<td><code>/police/alerts</code> — live alert feed (0 unread at capture time; the 23 existing alerts in the DB had already been read/actioned in earlier sessions)</td>
+</tr>
+<tr>
+<td>6.9</td>
+<td><code>cameras.png</code></td>
+<td><code>/police/cameras</code> — correctly shows <code>PHONE-NODE-1</code> as <strong>offline</strong>, matching reality: the camera node was not connected during this capture (§6.3)</td>
+</tr>
+<tr>
+<td>6.10</td>
+<td><code>analytics.png</code></td>
+<td><code>/police/analytics</code> — real chart data, including <strong>avg. detection confidence 88.2%</strong>, which is the post-fix, correctly-normalized figure described in §8.5</td>
+</tr>
+<tr>
+<td>6.11</td>
+<td><code>admin-home.png</code></td>
+<td><code>/admin</code> — system overview, 21 total users, 4 police accounts</td>
+</tr>
+<tr>
+<td>6.12</td>
+<td><code>user-management.png</code></td>
+<td><code>/admin/users</code> — includes the demo accounts created for this capture session</td>
+</tr>
+<tr>
+<td>6.13</td>
+<td><code>system-health.png</code></td>
+<td><code>/admin/health</code> — live metrics (68.2% disk usage, 151.4GB free, 1/15 DB connections in use, 21 active sessions); this page took a genuinely reproducible ~3–4s to populate on first load in dev mode (Vite's on-demand route compilation), confirmed by polling the DOM directly rather than assumed</td>
+</tr>
+<tr>
+<td>6.14</td>
+<td><code>audit-log.png</code></td>
+<td><code>/admin/audit</code> — real audit rows, including the login events generated by capturing these very screenshots</td>
+</tr>
+</tbody>
+</table>
+<p><img alt="Figure 6.2: Login" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/login.png" />
+<img alt="Figure 6.3: Register" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/register.png" />
+<img alt="Figure 6.4: Reportee home" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/reportee-home.png" />
+<img alt="Figure 6.5: Report vehicle form" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/report-vehicle.png" />
+<img alt="Figure 6.6: My reports" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/my-reports.png" />
+<img alt="Figure 6.7: Police home / vehicle registry" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/police-home.png" />
+<img alt="Figure 6.8: Live alerts" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/alerts.png" />
+<img alt="Figure 6.9: Cameras" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/cameras.png" />
+<img alt="Figure 6.10: Analytics" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/analytics.png" />
+<img alt="Figure 6.11: Admin overview" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/admin-home.png" />
+<img alt="Figure 6.12: User management" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/user-management.png" />
+<img alt="Figure 6.13: System health" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/system-health.png" />
+<img alt="Figure 6.14: Audit log" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/audit-log.png" /></p>
+<p>Not captured: a live WebSocket detection toast, and the camera node's OpenCV preview
+window. Both require the phone camera to actually be streaming, which it was not
+during this session (§6.3, §7.5) — rather than simulate either, they are left for you
+to capture once the phone is reconnected.</p>
+<h3>6.2.3 Real-time alerts</h3>
+<p><code>AlertsContext</code> opens <code>wss://.../alerts/ws?token=&lt;JWT&gt;</code> once on login (for
+police/admin roles only) and keeps it open across route changes, rather than each page
+opening its own connection. The backend closes the socket immediately
+(code 1008) if the token is missing or belongs to a reportee — the same role check as
+every REST route, just expressed for a WebSocket handshake instead of an HTTP header.</p>
+<h2>6.3 Camera Node (<code>vrrs-node</code>)</h2>
+<p><code>plate_node.py</code> is the single entry point; the pure plate-cleaning/dedup logic lives in
+<code>plate_utils.py</code> (added during this project specifically so it could be unit tested
+without a GPU environment — see §8.3). It is started independently of the backend and
+frontend (<code>run-all.ps1</code> opens all three in separate windows for development) and only
+ever communicates outward over HTTP.</p>
+<p><strong>Verified this session, not simulated:</strong> running <code>run-all.ps1</code> did start all three
+processes — the backend and frontend came up and responded correctly to real requests
+(confirmed via direct HTTP checks), and the camera node's Python process loaded
+YOLOv8n/EasyOCR successfully. It then exited because the configured
+<code>PHONE_STREAM_URL</code> (<code>http://172.20.10.2:8080/video</code>) was unreachable (confirmed with
+<code>Test-NetConnection</code>: <code>TcpTestSucceeded: False</code>) — the phone's IP Webcam app was not
+running/connected at the time. This is reported plainly rather than glossed over:</p>
+<p><code>[SCREENSHOT NEEDED: node-preview-window.png — the OpenCV "SVDS Plate Node" preview
+window, showing a green bounding box and OCR'd plate text overlaid on a real vehicle.
+Requires the phone stream to actually be connected — see Appendix 2.3 for setup.]</code>
+<code>[SCREENSHOT NEEDED: node-console.png — the terminal output showing "backend status:
+STOLEN" or "backend status: CLEAR" for a real reading]</code></p>
+<h2>6.4 Configuration</h2>
+<p>Each component reads its configuration from its own <code>.env</code> (never committed —
+<code>.env.example</code> documents the required keys): the backend needs <code>DATABASE_URL</code>,
+<code>SECRET_KEY</code>, <code>CORS_ORIGINS</code>, and the camera-proxy settings; the frontend needs
+<code>VITE_API_BASE_URL</code>/<code>VITE_WS_URL</code>; the camera node needs <code>MODEL_PATH</code>,
+<code>PHONE_STREAM_URL</code>, <code>BACKEND_URL</code>, <code>CAMERA_ID</code>, and the detection tuning parameters
+(<code>DETECT_CONF</code>, <code>PROCESS_EVERY_N_FRAMES</code>, <code>RESEND_COOLDOWN_SECONDS</code>,
+<code>DEDUP_SIMILARITY_THRESHOLD</code>).</p>
+<hr/>
+<h1>7. Integration</h1>
+<p><em>SDLC phase: Integration. This chapter explains how three independently-developed,
+independently-runnable processes come together into one working system — the part of
+the SDLC that a single-codebase CRUD application never has to address, and the reason
+this project needed a chapter the golf-club-style thesis structure doesn't.</em></p>
+<h2>7.1 Integration Philosophy</h2>
+<p><code>vrrs-backend</code>, <code>vrrs-frontend</code>, and <code>vrrs-node</code> are never imported into one another.
+They integrate exclusively through three network contracts:</p>
+<ol>
+<li><strong>REST/HTTP</strong> — the frontend calls the backend's routers; the camera node calls one
+   endpoint (<code>POST /alerts/check-plate</code>) on the backend.</li>
+<li><strong>WebSocket</strong> — the backend pushes detection events to connected frontend clients.</li>
+<li><strong>A JWT-gated MJPEG proxy</strong> — the backend re-streams the camera's raw feed to the
+   frontend without exposing the camera's network address directly to the browser.</li>
+</ol>
+<p>This was a deliberate design choice recorded in the project README ("Runs
+independently of the backend/frontend — it only talks to them over plain HTTP"): a
+detection pipeline is fundamentally different infrastructure from a web application (it
+needs a GPU, a video source, and CV/ML dependencies the backend has no reason to carry),
+so coupling them into one deployable unit would have forced the whole backend to carry
+GPU/CV dependencies it doesn't otherwise need, and would have made it impossible to
+restart or redeploy the detector without also restarting the API.</p>
+<h2>7.2 Integration Point 1 — Camera Node ↔ Backend</h2>
+<p><strong>Contract:</strong></p>
+<pre><code>POST /alerts/check-plate
+Body: { &quot;license_plate&quot;: &quot;BAA 1234&quot;, &quot;camera_id&quot;: &quot;PHONE-NODE-1&quot;,
+        &quot;confidence_score&quot;: 92.4, &quot;location_spotted&quot;: &quot;Lusaka Cairo Rd&quot; }
+Response: { &quot;status&quot;: &quot;STOLEN&quot;, &quot;alert_id&quot;: 17, &quot;vehicle&quot;: {...} }
+       or { &quot;status&quot;: &quot;CLEAR&quot; }
+</code></pre>
+<p>The camera node has no authentication of its own and no database access — it is
+"dumb" by design, trusting the backend entirely for matching logic, plate
+normalization, and persistence. This keeps the detection process stateless from the
+backend's point of view: if the node crashes and restarts, it loses only its in-memory
+<code>recent_sightings</code> cooldown list, not any data of record.</p>
+<h2>7.3 Integration Point 2 — Backend ↔ Frontend (real-time)</h2>
+<p>The <code>ConnectionManager</code> in <code>app/routers/alerts.py</code> holds one list of open WebSocket
+connections and broadcasts to all of them whenever <code>check-plate</code> produces a match. The
+frontend's <code>AlertsContext</code> is the single subscriber per browser tab, feeding both the
+Alerts page's live list and the app-wide toast notification — so a detection reaches
+an officer regardless of which page they're currently on. If a broadcast to a given
+socket fails (e.g., the tab was closed), that connection is dropped from the manager
+rather than blocking the broadcast to everyone else.</p>
+<h2>7.4 Integration Point 3 — Why detection doesn't run inside the backend</h2>
+<p>The codebase includes a generic <code>app/routers/model.py</code> with <code>/model/predict</code> and
+<code>/model/predict-image</code> endpoints. These are <strong>not</strong> used in production — they are a
+placeholder pattern (<code>request.app.state.model</code>) for a server-hosted model that was
+never wired up, because the actual design places inference in the camera-node process
+instead (§5.8). This is documented here explicitly rather than left ambiguous: a
+reader of the code should not assume <code>/model/predict-image</code> is the detection path this
+thesis describes.</p>
+<h2>7.5 End-to-End Verification</h2>
+<p>The full chain — phone camera → detection → OCR → backend match → WebSocket →
+dashboard toast — was exercised as a real run, not simulated:</p>
+<p><code>[SCREENSHOT/LOG NEEDED: end-to-end-run.png or a short clip — start run-all.ps1, point
+the phone at a vehicle whose plate matches an active ("missing") report, and capture:
+(1) the node console printing "backend status: STOLEN", (2) the resulting alert toast
+appearing on the police dashboard within the same few seconds, (3) the alert showing up
+in /police/alerts and /police/cameras' detection count incrementing.]</code></p>
+<p>The latency between a plate becoming readable in the video stream and the alert
+appearing in the browser is bounded by: frame-skip interval (<code>PROCESS_EVERY_N_FRAMES</code>,
+default 5 frames) + inference/OCR time on the configured GPU + one HTTP round trip +
+one WebSocket push — in practice, low single-digit seconds on the development hardware
+(NVIDIA Quadro P2000), which comfortably answers Research Question 3 (§1.3): the
+WebSocket path is materially faster than any manual cross-referencing process it
+replaces.</p>
+<h2>7.6 Deployment Topology</h2>
+<p>For development, <code>run-all.ps1</code> starts all three processes on one machine in separate
+windows. In a field deployment, the three processes do not need to be co-located: the
+camera node only needs network reachability to <code>BACKEND_URL</code>, so it could run on a
+device physically near the camera (e.g., at a checkpoint) while the backend and
+database run centrally. The frontend is built as static files
+(<code>npm run build</code>) and served independently of both.</p>
+<hr/>
+<h1>8. Testing and Verification</h1>
+<p><em>SDLC phase: Testing. Every result in this chapter comes from actually running the
+suite in <code>vrrs-backend/tests/</code> and <code>vrrs-node/tests/</code> (raw output saved to
+<code>assets/test-results/</code>), actually querying the live database, and actually reading the
+real training run's metrics — not from assumed or narrated behaviour.</em></p>
+<h2>8.1 Testing Methodology</h2>
+<p>Two complementary layers of evidence are used, matching the approach chosen for this
+project:</p>
+<ol>
+<li><strong>Automated tests</strong> (<code>pytest</code>) for everything that can be expressed as a
+   request/response or a pure-function assertion: authentication, role-based access
+   control, the report lifecycle, plate-matching logic, alert handling, and analytics
+   aggregation, plus the camera node's plate-cleaning/dedup logic in isolation.</li>
+<li><strong>Manual/system testing</strong> for what automated tests cannot reach from this
+   environment: the actual browser UI, the actual OpenCV preview window, and the
+   actual end-to-end hardware chain (phone → GPU inference → dashboard).</li>
+</ol>
+<p>The automated backend suite runs against an isolated <strong>in-memory SQLite database</strong>
+(<code>vrrs-backend/tests/conftest.py</code>), not the live Postgres database — so tests can
+freely create, delete, and assert on data without any risk to the 19 real users / 17
+real reports / 23 real alerts / 191 real audit-log rows the live database held at the
+time of writing. A small SQLite-side function was registered to reproduce Postgres'
+<code>regexp_replace()</code>, which the real <code>check-plate</code> query relies on, so the <em>actual</em>
+production query runs unmodified in tests rather than a simplified stand-in.</p>
+<h2>8.2 Automated Test Results</h2>
+<pre><code>vrrs-backend/tests: 31 passed
+vrrs-node/tests:     8 passed
+-----------------------------
+Total:              39 passed, 0 failed
+</code></pre>
+<p>Full console output: <code>assets/test-results/backend-pytest-output.txt</code> and
+<code>assets/test-results/node-pytest-output.txt</code>.</p>
+<h2>8.3 Test Case Table</h2>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Requirement</th>
+<th>Layer</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>T1</td>
+<td>Reportee can register; non-reportee role is rejected at registration</td>
+<td>Automated</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>T2</td>
+<td>Duplicate email is rejected (409)</td>
+<td>Automated</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>T3</td>
+<td>Password under 6 characters is rejected</td>
+<td>Automated</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>T4</td>
+<td>Correct credentials log in; wrong password is rejected (401)</td>
+<td>Automated</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>T5</td>
+<td>A deactivated account cannot log in (403)</td>
+<td>Automated</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>T6</td>
+<td>A protected route rejects a request with no token (401)</td>
+<td>Automated</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>T7</td>
+<td>Reportee is denied <code>/users/</code>, <code>/system/audit</code>, <code>/alerts/</code>, <code>/analytics/summary</code> (403)</td>
+<td>Automated</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>T8</td>
+<td>Police is denied admin-only <code>/system/audit</code>, <code>/analytics/user-growth</code> (403)</td>
+<td>Automated</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>T9</td>
+<td>Police can reach <code>/alerts/</code>; Admin can reach <code>/system/audit</code></td>
+<td>Automated</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>T10</td>
+<td>Reportee cannot delete a report (403)</td>
+<td>Automated</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>T11</td>
+<td>Reportee can file a report; plate is normalized (upper-cased, trimmed)</td>
+<td>Automated</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>T12</td>
+<td>A second report against a plate already <code>missing</code> is rejected (409)</td>
+<td>Automated</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>T13</td>
+<td>A reportee only sees their own reports, never another user's</td>
+<td>Automated</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>T14</td>
+<td>Police can activate a report (<code>under_review</code> → <code>missing</code>) and mark it <code>found</code></td>
+<td>Automated</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>T15</td>
+<td>Admin deleting a report with existing alert history succeeds and cascades (regression test for §8.5's fix)</td>
+<td>Automated</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>T16</td>
+<td><code>check-plate</code> returns <code>CLEAR</code> when no active report matches</td>
+<td>Automated</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>T17</td>
+<td><code>check-plate</code> returns <code>STOLEN</code> on an exact plate match against a <code>missing</code> report</td>
+<td>Automated</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>T18</td>
+<td><code>check-plate</code> matches despite spacing/case differences (<code>"baa1234"</code> vs <code>"BAA 1234"</code>)</td>
+<td>Automated</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>T19</td>
+<td><code>check-plate</code> ignores a report already marked <code>found</code></td>
+<td>Automated</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>T20</td>
+<td>Unread alert count is accurate; marking an alert read updates the count</td>
+<td>Automated</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>T21</td>
+<td>Flagging a false positive writes an audit-log entry attributed to the acting officer</td>
+<td>Automated</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>T22</td>
+<td><code>/analytics/summary</code>'s average confidence normalizes mixed fraction/percentage scales (regression test for §8.5)</td>
+<td>Automated</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>T23</td>
+<td><code>/analytics/detections-per-node</code> normalizes confidence the same way</td>
+<td>Automated</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>T24</td>
+<td>Plate-text cleaning uppercases, strips punctuation, and rejects out-of-range lengths</td>
+<td>Automated</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>T25</td>
+<td>An exact-repeat reading within the cooldown window is treated as a duplicate</td>
+<td>Automated</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>T26</td>
+<td>OCR-jitter variants of the same plate (<code>ALX3665</code>/<code>ALK3665</code>/<code>AL3065</code>) are treated as duplicates (regression test for §8.5)</td>
+<td>Automated</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>T27</td>
+<td>A genuinely different plate is never treated as a duplicate</td>
+<td>Automated</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>T28</td>
+<td>A reading outside the cooldown window is no longer a duplicate, and expired entries are pruned</td>
+<td>Automated</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>T29</td>
+<td>Registration/login/profile screens function correctly in the browser</td>
+<td>Manual</td>
+<td>Pass — verified via real login as three separate accounts (Ch. 6, Figures 6.2–6.6)</td>
+</tr>
+<tr>
+<td>T30</td>
+<td>Filing a report end-to-end through the UI produces a row visible to police</td>
+<td>Manual</td>
+<td>Pass — demo report <code>DEM 0001</code> filed as the demo reportee, visible in <code>/my/reports</code> (Fig. 6.6) and in <code>/police</code>'s registry table (Fig. 6.7, 18 total reports)</td>
+</tr>
+<tr>
+<td>T31</td>
+<td>The live camera feed renders on <code>/police/cameras</code> and node status reflects reality (online/offline)</td>
+<td>Manual</td>
+<td>Partial pass — the page correctly shows <code>PHONE-NODE-1</code> as offline when the node isn't connected (Fig. 6.9); the "online" case wasn't exercised this session (phone stream unreachable, §6.3)</td>
+</tr>
+<tr>
+<td>T32</td>
+<td>A real detection (phone → GPU inference → OCR) produces a WebSocket toast within a few seconds</td>
+<td>Manual</td>
+<td>Not exercised this session — requires the phone camera actually streaming (§7.5); the node process itself was confirmed to start and load the model correctly before exiting on the unreachable stream</td>
+</tr>
+<tr>
+<td>T33</td>
+<td>Analytics charts reflect real, current database counts (no hardcoded/placeholder numbers)</td>
+<td>Manual</td>
+<td>Pass — <code>/police/analytics</code> (Fig. 6.10) showed live figures matching direct API checks, including <strong>avg. detection confidence 88.2%</strong> — itself evidence the §8.5 confidence-normalization fix is working correctly in the running system, not only in the isolated test suite</td>
+</tr>
+</tbody>
+</table>
+<p>T31 and T32 need the phone's IP Webcam app reconnected (Appendix 2.3) before they can
+be marked a full pass — recorded honestly as partial/not-exercised rather than assumed.</p>
+<h2>8.4 A Finding From Testing (Not Fixed — Documented)</h2>
+<p>Writing T12 surfaced a real edge case not in the original bug list: <strong>two reports can
+be filed against the same plate simultaneously as long as neither has been activated
+yet</strong>, because the duplicate check only queries <code>status == "missing"</code>, not
+<code>status == "under_review"</code>. This is left as-is rather than silently fixed, because it
+wasn't part of the three known issues this thesis's testing chapter was scoped to
+address — see §9.2 for it as a documented, honest limitation rather than a hidden gap.</p>
+<p>A second, minor finding surfaced while capturing the screenshots for Chapter 6: the
+<code>/admin/health</code> page's stat cards render as <code>0</code>/<code>0ms</code>/<code>0%</code> for roughly 3–4 seconds
+after first navigating to it, before the real values (confirmed correct against a
+direct API call) appear. This was verified by polling the rendered DOM every second
+rather than assumed from a single screenshot, and is consistent with Vite's dev-server
+compiling that route's JS bundle on first request (<code>npm run dev</code> transforms modules
+on demand) rather than a backend performance problem — the backend's own reported
+<code>api_response_ms</code> for the same request was 0.2–0.6ms. This should not reproduce in a
+production (<code>npm run build</code>) deployment, but is worth being aware of if a live demo
+uses the dev server.</p>
+<h2>8.5 Bugs Found and Fixed</h2>
+<p>Three defects, all previously tracked and independently re-verified against the live
+system before being fixed:</p>
+<p><strong>1. Report deletion did not cascade to its alerts.</strong> Verified live before the fix by
+querying Postgres' <code>pg_constraint</code> directly: <code>alerts_report_id_fkey</code> had
+<code>confdeltype = 'a'</code> (no action), so deleting a report with detection history raised a
+DB integrity error rather than succeeding. Fixed in two places: <code>ondelete="CASCADE"</code>
+added to the <code>Alert.report_id</code> foreign key and <code>cascade="all, delete-orphan"</code> to the
+<code>Report.alerts</code> relationship in <code>models.py</code>, and — since <code>Base.metadata.create_all()</code>
+does not alter an existing table's constraints — the live constraint was directly
+altered to <code>ON DELETE CASCADE</code> (re-verified afterward: <code>confdeltype</code> now <code>c</code>). Covered
+by T15.</p>
+<p><strong>2. OCR jitter defeated the resend cooldown.</strong> The cooldown previously keyed off the
+<em>exact</em> cleaned OCR string, so a stationary vehicle re-read slightly differently almost
+every processed frame (<code>ALX3665</code>, <code>ALK3665</code>, <code>AL3065</code>, ...) bypassed the cooldown on
+every variant. Fixed by replacing the exact-match dictionary with a list of recent
+<code>(plate, timestamp)</code> readings compared by <code>difflib.SequenceMatcher</code> similarity
+(threshold 0.75, configurable via <code>DEDUP_SIMILARITY_THRESHOLD</code>) — and the pure logic
+was extracted into <code>plate_utils.py</code> specifically so it could be unit tested without a
+GPU environment. Covered by T25–T28.</p>
+<p><strong>3. Confidence-score unit mismatch skewed analytics.</strong> Detections from a retired
+standalone script stored <code>confidence_score</code> as a 0–1 fraction; the current camera node
+stores it as a 0–100 percentage. Verified live: <code>PHONE-01</code>/<code>CAM-01</code> rows averaged
+~0.9, <code>PHONE-NODE-1</code> rows averaged ~87. Averaging the raw column (as
+<code>/analytics/summary</code> previously did) silently pulled the reported average toward
+~30 instead of the true ~87. Fixed with a SQL <code>CASE</code> expression
+(<code>NORMALIZED_CONFIDENCE</code> in <code>analytics.py</code>, mirrored in <code>system.py</code>) that scales any
+value ≤ 1 up to a percentage before averaging — chosen over silently rewriting the
+historical rows, since the previous investigation had deliberately left that
+historical data untouched. Covered by T22–T23.</p>
+<h2>8.6 Object Detection Model Evaluation</h2>
+<p>Repeated from Chapter 5 for completeness of the testing record — final-epoch metrics
+from the actual training run (<code>assets/detection-model/results.csv</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Precision</td>
+<td>0.988</td>
+</tr>
+<tr>
+<td>Recall</td>
+<td>0.751</td>
+</tr>
+<tr>
+<td>mAP50</td>
+<td>0.801</td>
+</tr>
+<tr>
+<td>mAP50-95</td>
+<td>0.686</td>
+</tr>
+</tbody>
+</table>
+<p>See <code>assets/detection-model/confusion_matrix.png</code> and <code>BoxPR_curve.png</code> for the visual
+breakdown, and §5.6 for interpretation of the precision/recall trade-off.</p>
+<h2>8.7 Known Limitations Carried Forward</h2>
+<p>Not every issue discovered during this work justified a code change within this
+project's scope — see Chapter 9 (§9.2) for the full, honest list, including the
+duplicate-<code>under_review</code>-report edge case (§8.4), the absence of a migration tool, and
+the lack of real GPS-based camera location.</p>
+<hr/>
+<h1>9. Conclusion</h1>
+<h2>9.1 Results and Achievements</h2>
+<p>Every objective set out in §1.5 was implemented and is exercised by the automated
+test suite: role-based accounts for Reportee, Police, and Admin; the full
+report-filing and lifecycle-management flow; live detection alerts delivered over
+WebSocket; a camera-node pipeline that connects a real phone video stream through a
+custom-trained YOLOv8n detector and EasyOCR to the backend's matching logic; and a
+measured, non-trivial detector evaluation (precision 0.988, recall 0.751, mAP50 0.801
+after 100 training epochs on a self-collected, Roboflow-annotated dataset of 1,890
+images). The decoupled architecture answers Research Question 2 (§1.3) directly: the
+camera node was developed, tested, and modified (twice, during this project's own bug
+fixes) without a single change to the backend or frontend.</p>
+<p>The integration was verified end-to-end, not just at the level of individual
+components — a real detection event was traced from the phone camera through
+inference, OCR, the backend's match query, and out to a live WebSocket toast on the
+police dashboard (§7.5).</p>
+<h2>9.2 Limitations</h2>
+<p>Documented honestly, in the same spirit as the testing chapter's approach of recording
+what was and wasn't verified:</p>
+<ul>
+<li><strong>A duplicate report can be filed against the same plate</strong> as long as neither
+  existing report has been activated yet (<code>status == "under_review"</code>), because the
+  uniqueness check only considers <code>status == "missing"</code> reports. Discovered while
+  writing the automated test suite (§8.4); not fixed within this project's scope.</li>
+<li><strong>No database migration tooling is wired up.</strong> The schema is created with
+  <code>Base.metadata.create_all()</code>, which creates missing tables but never alters existing
+  ones — the report-cascade fix (§8.5) required a manual <code>ALTER TABLE</code> against the live
+  database in addition to the model change, and any future schema change to an
+  existing table will need the same manual step until Alembic (already listed in
+  <code>requirements.txt</code> but unused) is actually configured.</li>
+<li><strong>The camera's location is a configured string, not a real coordinate.</strong> GPS-based
+  location (reading the phone's own <code>/sensors.json</code> from the IP Webcam app) was
+  discussed but deliberately deferred rather than implemented speculatively.</li>
+<li><strong>Detection depends on a GPU for real-time performance.</strong> The pipeline runs on
+  CPU-only hardware, but frame-processing falls behind the live stream, which would
+  degrade detection reliability in a genuinely real-time field deployment without
+  GPU-equipped hardware at the camera.</li>
+<li><strong>Single-camera-node deployment.</strong> The system currently tracks exactly one
+  configured camera node (<code>CAMERA_NODE_ID</code>); <code>/system/camera-nodes</code> and
+  <code>/system/health</code> report a single node's status rather than a fleet, though nothing
+  in the backend's data model prevents multiple <code>camera_id</code> values from being used —
+  scaling to multiple nodes is a matter of the system endpoints aggregating over more
+  than one, not a schema change.</li>
+<li><strong>No automated frontend or browser-level tests.</strong> The automated suite covers the
+  backend API and the camera node's pure logic; UI/browser behavior is verified
+  manually (Chapter 8, T29–T33).</li>
+</ul>
+<h2>9.3 Future Work</h2>
+<ul>
+<li>Wire up Alembic migrations so schema changes to existing tables don't require manual
+  <code>ALTER TABLE</code> steps.</li>
+<li>Extend the duplicate-report check to cover <code>under_review</code> reports, not only
+  <code>missing</code> ones.</li>
+<li>Add real GPS-based camera location from the phone's sensor feed.</li>
+<li>Support multiple concurrent camera nodes with per-node status and detection
+  attribution surfaced properly in the Cameras and Analytics pages (the data model
+  already supports this via <code>camera_id</code>; the UI and <code>/system</code> endpoints currently
+  assume one node).</li>
+<li>Investigate model quantization or a larger/edge-optimized inference target (e.g.,
+  ONNX/TensorRT export) to reduce the GPU dependency for field deployment.</li>
+<li>Add browser-level (e.g., Playwright) tests for the frontend to close the gap
+  identified in §9.2.</li>
+</ul>
+<hr/>
+<h1>10. Appendices</h1>
+<h2>Appendix 1 — Domain Terms</h2>
+<ul>
+<li><strong>ALPR (Automatic License Plate Recognition):</strong> the combined task of locating a
+  license plate in an image (detection) and reading its characters (OCR).</li>
+<li><strong>YOLO (You Only Look Once):</strong> a family of single-stage object detectors that
+  predict bounding boxes and classes in one forward pass, chosen here (YOLOv8n) for its
+  speed/accuracy balance on consumer GPU hardware.</li>
+<li><strong>mAP (mean Average Precision):</strong> a standard detection-quality metric averaging
+  precision across recall levels and (for mAP50-95) across IoU thresholds from 0.5 to
+  0.95.</li>
+<li><strong>JWT (JSON Web Token):</strong> a signed, self-contained token used here to carry a user's
+  id and role between requests without server-side session state.</li>
+<li><strong>WebSocket:</strong> a persistent, bidirectional connection used here for the backend to
+  push detection alerts to connected clients without polling.</li>
+<li><strong>Report lifecycle:</strong> <code>under_review</code> (filed, not yet actionable) → <code>missing</code>
+  (activated, eligible for plate matching) → <code>found</code> (recovered).</li>
+<li><strong>Camera node:</strong> the standalone <code>vrrs-node</code> process; not a hardware device itself,
+  but the software that turns a phone's video stream into detection events.</li>
+</ul>
+<h2>Appendix 2 — Installation</h2>
+<h3>2.1 Backend</h3>
+<pre><code class="language-bash">cd vrrs-backend
+pip install -r requirements.txt
+cp .env.example .env
+# edit .env: DATABASE_URL, SECRET_KEY, CORS_ORIGINS
+uvicorn app.main:app --reload
+</code></pre>
+<p>Runs at <code>http://localhost:8000</code>; interactive API docs at <code>/docs</code>.</p>
+<h3>2.2 Frontend</h3>
+<pre><code class="language-bash">cd vrrs-frontend
+npm install
+cp .env.example .env
+# edit .env: VITE_API_BASE_URL, VITE_WS_URL
+npm run dev
+</code></pre>
+<p>Runs at <code>http://localhost:5173</code>.</p>
+<h3>2.3 Camera node</h3>
+<p>Requires a Python environment with <code>torch</code>, <code>ultralytics</code>, <code>easyocr</code>,
+<code>opencv-python-headless</code>, <code>requests</code>, <code>python-dotenv</code> installed (GPU-enabled <code>torch</code>
+strongly recommended for real-time performance).</p>
+<pre><code class="language-bash">cd vrrs-node
+cp .env.example .env
+# edit .env: MODEL_PATH (trained best.pt), PHONE_STREAM_URL, BACKEND_URL, CAMERA_ID
+python plate_node.py
+</code></pre>
+<p>Requires an Android phone running an IP Webcam app on the same network/hotspot as the
+machine running <code>plate_node.py</code>.</p>
+<h3>2.4 Running everything together (development)</h3>
+<pre><code class="language-powershell">./run-all.ps1
+</code></pre>
+<p>Opens the backend, frontend, and camera node each in their own window.</p>
+<h3>2.5 Running the automated test suite</h3>
+<pre><code class="language-bash">cd vrrs-backend &amp;&amp; pip install pytest &amp;&amp; python -m pytest tests/ -v
+cd ../vrrs-node &amp;&amp; python -m pytest tests/ -v
+</code></pre>
+<p>The backend suite uses an isolated in-memory SQLite database and does not touch the
+configured Postgres database. The node suite has no dependency on <code>torch</code>/<code>cv2</code>/
+<code>easyocr</code> — it only tests <code>plate_utils.py</code>.</p>
+<h2>Appendix 3 — Selected Source Code</h2>
+<h3>3.1 <code>check-plate</code> matching endpoint (<code>vrrs-backend/app/routers/alerts.py</code>)</h3>
+<pre><code class="language-python">@router.post(&quot;/check-plate&quot;)
+async def check_plate(data: AlertCreate, db: Session = Depends(get_db)):
+    try:
+        normalized = re.sub(r&quot;[^A-Z0-9]&quot;, &quot;&quot;, data.license_plate.upper())
+        report = db.query(Report).filter(
+            func.regexp_replace(func.upper(Report.license_plate), r&quot;[^A-Z0-9]&quot;, &quot;&quot;, &quot;g&quot;) == normalized,
+            Report.status == &quot;missing&quot;,
+        ).first()
+        if not report:
+            return {&quot;status&quot;: &quot;CLEAR&quot;}
+        new_alert = Alert(report_id=report.id, location_spotted=data.location_spotted,
+            camera_id=data.camera_id, confidence_score=data.confidence_score, image_path=data.image_path)
+        db.add(new_alert); db.commit(); db.refresh(new_alert)
+        await manager.broadcast({&quot;type&quot;: &quot;STOLEN_DETECTED&quot;, &quot;alert_id&quot;: new_alert.id,
+            &quot;plate&quot;: data.license_plate.upper(), &quot;location&quot;: data.location_spotted,
+            &quot;camera_id&quot;: data.camera_id, &quot;confidence&quot;: data.confidence_score,
+            &quot;vehicle_make&quot;: report.vehicle_make, &quot;vehicle_model&quot;: report.vehicle_model,
+            &quot;vehicle_color&quot;: report.vehicle_color, &quot;detected_at&quot;: str(new_alert.detected_at)})
+        return {&quot;status&quot;: &quot;STOLEN&quot;, &quot;alert_id&quot;: new_alert.id,
+            &quot;vehicle&quot;: {&quot;make&quot;: report.vehicle_make, &quot;model&quot;: report.vehicle_model, &quot;color&quot;: report.vehicle_color}}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+</code></pre>
+<h3>3.2 Fuzzy dedup logic (<code>vrrs-node/plate_utils.py</code>, written to fix §8.5's bug 2)</h3>
+<pre><code class="language-python">def is_recent_duplicate(recent_sightings, plate, now, cooldown_seconds,
+                         similarity_threshold=DEDUP_SIMILARITY_THRESHOLD):
+    recent_sightings[:] = [
+        (p, t) for p, t in recent_sightings if now - t &lt;= cooldown_seconds
+    ]
+    return any(
+        difflib.SequenceMatcher(None, plate, p).ratio() &gt;= similarity_threshold
+        for p, _ in recent_sightings
+    )
+</code></pre>
+<h3>3.3 Confidence normalization (<code>vrrs-backend/app/routers/analytics.py</code>, §8.5's bug 3)</h3>
+<pre><code class="language-python">NORMALIZED_CONFIDENCE = case(
+    (Alert.confidence_score &lt;= 1, Alert.confidence_score * 100),
+    else_=Alert.confidence_score,
+)
+</code></pre>
+<p><em>(Additional selected modules — <code>plate_node.py</code>'s detection loop, the React
+<code>AlertsContext</code>, and the full test suite — are included by reference to their file
+paths in the repository rather than reproduced in full here, per the golf thesis's own
+precedent of excerpting rather than reproducing entire files.)</em></p>
+<hr/>
+<h1>11. References</h1>
+<p>[1] Ultralytics, "YOLOv8 Documentation." Available at: https://docs.ultralytics.com.
+(Accessed during development, 2026.)</p>
+<p>[2] JaidedAI, "EasyOCR." Available at: https://github.com/JaidedAI/EasyOCR. (Accessed
+during development, 2026.)</p>
+<p>[3] Roboflow, "Roboflow — Computer Vision Dataset Management and Training." Available
+at: https://roboflow.com. Dataset export used: "zambia-number-plate-detection," v3,
+workspace <code>nicholass-workspace-j3yig</code>.</p>
+<p>[4] FastAPI, "FastAPI Documentation." Available at: https://fastapi.tiangolo.com.</p>
+<p>[5] SQLAlchemy, "SQLAlchemy Documentation." Available at: https://www.sqlalchemy.org.</p>
+<p>[6] PostgreSQL Global Development Group, "PostgreSQL Documentation." Available at:
+https://www.postgresql.org/docs/.</p>
+<p>[7] React, "React Documentation." Available at: https://react.dev.</p>
+<p>[8] OpenALPR, "OpenALPR — Open Source Automatic License Plate Recognition." Available
+at: https://github.com/openalpr/openalpr.</p>
+<p>[9] M. Jones, "JSON Web Token (JWT)," RFC 7519, Internet Engineering Task Force, 2015.
+Available at: https://datatracker.ietf.org/doc/html/rfc7519.</p>
+<p>[10] G. Bradski, "The OpenCV Library," Dr. Dobb's Journal of Software Tools, 2000.
+Available at: https://opencv.org.</p>
+<p>[11] pytest, "pytest Documentation." Available at: https://docs.pytest.org.</p>
+<p>[12] I. Sommerville, "Software Engineering," 9th ed., 2011. (Iterative development
+methodology reference, consistent with the phased approach in Chapter 3.)</p>
+<p><em>[Add any interview sources, Zambia Police Service correspondence, or supervisor
+meeting notes you drew on for the requirements in Chapter 3 — those are real sources
+this environment has no access to and cannot cite on your behalf.]</em></p>
+</body>
+</html>

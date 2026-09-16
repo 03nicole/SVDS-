@@ -1,0 +1,12 @@
+names:
+- zambia-number-plate-detection
+nc: 1
+roboflow:
+  license: CC BY 4.0
+  project: zambia-number-plate-detection
+  url: https://universe.roboflow.com/nicholass-workspace-j3yig/zambia-number-plate-detection/dataset/3
+  version: 3
+  workspace: nicholass-workspace-j3yig
+test: ../test/images
+train: ../train/images
+val: ../valid/images

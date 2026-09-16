@@ -1,0 +1,84 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\user\Downloads\vrrs\vrrs-backend\.venv_new\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\user\Downloads\vrrs\vrrs-backend
+plugins: anyio-4.14.2
+collecting ... collected 31 items
+
+tests/test_alerts.py::test_check_plate_clear_when_no_match PASSED        [  3%]
+tests/test_alerts.py::test_check_plate_stolen_on_exact_match PASSED      [  6%]
+tests/test_alerts.py::test_check_plate_matches_despite_spacing_and_case_difference PASSED [  9%]
+tests/test_alerts.py::test_check_plate_ignores_found_report PASSED       [ 12%]
+tests/test_alerts.py::test_unread_count_and_mark_read PASSED             [ 16%]
+tests/test_alerts.py::test_flag_false_positive_writes_audit_log PASSED   [ 19%]
+tests/test_analytics.py::test_summary_normalizes_mixed_confidence_scales PASSED [ 22%]
+tests/test_analytics.py::test_detections_per_node_normalizes_confidence PASSED [ 25%]
+tests/test_auth.py::test_register_reportee_succeeds PASSED               [ 29%]
+tests/test_auth.py::test_register_duplicate_email_rejected PASSED        [ 32%]
+tests/test_auth.py::test_register_non_reportee_role_rejected PASSED      [ 35%]
+tests/test_auth.py::test_register_short_password_rejected PASSED         [ 38%]
+tests/test_auth.py::test_login_success PASSED                            [ 41%]
+tests/test_auth.py::test_login_wrong_password_rejected PASSED            [ 45%]
+tests/test_auth.py::test_login_inactive_account_rejected PASSED          [ 48%]
+tests/test_auth.py::test_protected_route_requires_token PASSED           [ 51%]
+tests/test_rbac.py::test_reportee_cannot_reach_police_or_admin_routes[/users/] PASSED [ 54%]
+tests/test_rbac.py::test_reportee_cannot_reach_police_or_admin_routes[/system/audit] PASSED [ 58%]
+tests/test_rbac.py::test_reportee_cannot_reach_police_or_admin_routes[/alerts/] PASSED [ 61%]
+tests/test_rbac.py::test_reportee_cannot_reach_police_or_admin_routes[/analytics/summary] PASSED [ 64%]
+tests/test_rbac.py::test_police_cannot_reach_admin_only_routes[/system/audit] PASSED [ 67%]
+tests/test_rbac.py::test_police_cannot_reach_admin_only_routes[/analytics/user-growth] PASSED [ 70%]
+tests/test_rbac.py::test_police_can_reach_police_routes PASSED           [ 74%]
+tests/test_rbac.py::test_admin_can_reach_admin_routes PASSED             [ 77%]
+tests/test_rbac.py::test_reportee_cannot_delete_report PASSED            [ 80%]
+tests/test_reports.py::test_create_report_as_reportee PASSED             [ 83%]
+tests/test_reports.py::test_duplicate_active_report_rejected PASSED      [ 87%]
+tests/test_reports.py::test_duplicate_missing_report_rejected PASSED     [ 90%]
+tests/test_reports.py::test_reportee_only_sees_own_reports PASSED        [ 93%]
+tests/test_reports.py::test_police_can_activate_and_mark_found PASSED    [ 96%]
+tests/test_reports.py::test_admin_delete_cascades_to_alerts PASSED       [100%]
+
+============================== warnings summary ===============================
+app\database.py:13
+  C:\Users\user\Downloads\vrrs\vrrs-backend\app\database.py:13: MovedIn20Warning: The ``declarative_base()`` function is now available as sqlalchemy.orm.declarative_base(). (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+    Base = declarative_base()
+
+.venv_new\Lib\site-packages\pydantic\_internal\_config.py:284
+.venv_new\Lib\site-packages\pydantic\_internal\_config.py:284
+.venv_new\Lib\site-packages\pydantic\_internal\_config.py:284
+.venv_new\Lib\site-packages\pydantic\_internal\_config.py:284
+  C:\Users\user\Downloads\vrrs\vrrs-backend\.venv_new\Lib\site-packages\pydantic\_internal\_config.py:284: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.7/migration/
+    warnings.warn(DEPRECATION_MESSAGE, DeprecationWarning)
+
+app\routers\system.py:22
+  C:\Users\user\Downloads\vrrs\vrrs-backend\app\routers\system.py:22: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    SERVER_START = datetime.utcnow()
+
+tests/test_alerts.py: 2 warnings
+tests/test_analytics.py: 2 warnings
+tests/test_auth.py: 5 warnings
+tests/test_rbac.py: 9 warnings
+tests/test_reports.py: 7 warnings
+  C:\Users\user\Downloads\vrrs\vrrs-backend\app\auth.py:25: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    "exp":  datetime.utcnow() + timedelta(hours=TOKEN_EXPIRY_HOURS)
+
+tests/test_alerts.py: 4 warnings
+tests/test_analytics.py: 2 warnings
+tests/test_rbac.py: 9 warnings
+tests/test_reports.py: 8 warnings
+  C:\Users\user\Downloads\vrrs\vrrs-backend\.venv_new\Lib\site-packages\jose\jwt.py:311: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    now = timegm(datetime.utcnow().utctimetuple())
+
+tests/test_analytics.py::test_summary_normalizes_mixed_confidence_scales
+  C:\Users\user\Downloads\vrrs\vrrs-backend\app\routers\analytics.py:36: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    users_new_this_week = db.query(func.count(User.id)).filter(User.created_at >= datetime.utcnow() - timedelta(days=7)).scalar() or 0
+
+tests/test_analytics.py::test_summary_normalizes_mixed_confidence_scales
+  C:\Users\user\Downloads\vrrs\vrrs-backend\app\routers\analytics.py:37: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    new_this_week = db.query(func.count(Report.id)).filter(Report.report_date >= datetime.utcnow() - timedelta(days=7)).scalar() or 0
+
+tests/test_reports.py::test_police_can_activate_and_mark_found
+  C:\Users\user\Downloads\vrrs\vrrs-backend\app\routers\reports.py:79: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    report.status = "found"; report.resolved_by = user["id"]; report.resolved_date = datetime.utcnow()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================= 31 passed, 57 warnings in 8.40s =======================

@@ -26,6 +26,8 @@ dist/
 .idea/
 Thumbs.db
 .DS_Store
+~$*.docx
+~$*.doc
 
 # Claude Code local state
 .claude/
