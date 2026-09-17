@@ -8,7 +8,8 @@
 ```
 vrrs/
 ├── vrrs-backend/       FastAPI backend
-└── vrrs-frontend/      React frontend
+├── vrrs-frontend/      React frontend
+└── vrrs-node/          Phone-camera detection node (YOLO + EasyOCR)
 ```
 
 ---
