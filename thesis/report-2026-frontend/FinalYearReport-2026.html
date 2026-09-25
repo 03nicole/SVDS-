@@ -1,0 +1,1868 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>Final Year Project Report 2026</title>
+<style>
+  @page { size: A4; margin: 2.5cm; }
+  body { font-family: 'Times New Roman', serif; font-size: 12pt; line-height: 1.5; color: #000; max-width: 210mm; margin: 0 auto; }
+  h1 { font-size: 20pt; text-align: center; page-break-before: always; margin-top: 0; }
+  h2 { font-size: 15pt; margin-top: 1.4em; }
+  h3 { font-size: 13pt; margin-top: 1.1em; }
+  p, li { text-align: justify; }
+  code { font-family: Consolas, 'Courier New', monospace; font-size: 10pt; }
+  pre { background: #f5f5f5; border: 1px solid #ddd; padding: 8px; font-size: 9pt; white-space: pre-wrap; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 10.5pt; }
+  th, td { border-top: 1px solid #444; border-bottom: 1px solid #444; padding: 4px 8px; text-align: left; vertical-align: top; }
+  th { background: #efefef; }
+  img { max-width: 100%; display: block; margin: 0.8em auto; }
+  .cover { text-align: center; page-break-after: always; }
+  .cover h2, .cover h3 { text-align: center; }
+  .plain-title { font-size: 20pt; font-weight: bold; text-align: center; page-break-before: always; margin: 1em 0; }
+  .sig { margin: 1.4em 0; } .sig span { display: inline-block; border-bottom: 1px solid #000; width: 60%; }
+  .center { text-align: center; }
+  .todo { background: #fff3b0; }
+</style>
+</head><body>
+
+<div class="cover">
+<h3>THE UNIVERSITY OF ZAMBIA</h3>
+<h3>SCHOOL OF NATURAL AND APPLIED SCIENCES</h3>
+<h3>DEPARTMENT OF COMPUTING AND INFORMATICS</h3>
+<br/><br/>
+<h2>FINAL YEAR PROJECT REPORT</h2>
+<h3>ACADEMIC YEAR 2026</h3>
+<br/><br/>
+<h1 style="page-break-before:avoid">SVDS: A Camera-Based Stolen Vehicle Detection System for the Zambia Police Service &mdash; The Web Portals, Analytics and Quality Assurance</h1>
+<br/>
+<p class="center">A Final Year Project Report Submitted to the<br/>Department of Computing and Informatics<br/>in partial fulfilment of the requirements for the award of</p>
+<p class="center"><b>[DEGREE PROGRAMME &mdash; confirm]</b></p>
+<br/><br/>
+<p class="center"><b>Student Name:</b> [STUDENT NAME &mdash; Role 4: Frontend]<br/>
+<b>Computer Number:</b> [COMPUTER NUMBER]<br/>
+<b>Supervisor:</b> [SUPERVISOR NAME]<br/>
+<b>Date of Submission:</b> [DATE OF SUBMISSION]</p>
+</div>
+
+<div class="plain-title">DECLARATION</div>
+<p>I declare that this final year project report is my own work and has been prepared in accordance with the academic requirements of the University of Zambia. All sources of information, ideas, data, software, images, and other material that are not my own have been appropriately acknowledged and referenced.</p>
+<p>Where this project was undertaken as part of a group, I have clearly identified my individual contributions and have not presented the work of other group members as my own.</p>
+<p class="sig"><b>Student Name:</b> [STUDENT NAME &mdash; Role 4: Frontend]</p>
+<p class="sig"><b>Computer Number:</b> <span>&nbsp;</span></p><p class="sig"><b>Signature:</b> <span>&nbsp;</span></p><p class="sig"><b>Date:</b> <span>&nbsp;</span></p>
+
+<div class="plain-title">APPROVAL</div>
+<p>This final year project report has been submitted for examination with the approval of the project supervisor.</p>
+<p class="sig"><b>Supervisor Name:</b> <span>&nbsp;</span></p><p class="sig"><b>Signature:</b> <span>&nbsp;</span></p><p class="sig"><b>Date:</b> <span>&nbsp;</span></p><p class="sig"><b>Departmental/Examiner Approval (if applicable):</b> <span>&nbsp;</span></p>
+<div class="plain-title">ABSTRACT</div>
+
+<p>Stolen-vehicle recovery in Zambia depends largely on police officers chancing to recognise a plate number from a paper report or radio bulletin. This project, carried out by a group of four students, built SVDS, a Stolen Vehicle Detection System on top of the VRRS vehicle registry. The public files stolen-vehicle reports through a web application, and a camera node reads plates from a phone's video stream and checks them against active reports, so connected police officers are alerted in real time.</p>
+<p>This individual report covers the front end, analytics, testing and documentation. The front end is a React single-page application with three role-based portals (reportee, police, admin) in fourteen pages, built with four runtime packages. Seven analytics endpoints compute recovery rate, recovery time, detections and alert statistics from stored records, and a shared expression corrects a defect in which detection confidence stored on two scales (fraction and percentage) produced an average of about 30 instead of about 87. The system is supported by 39 automated tests, a README and a run script.</p>
+<p>The application builds into a 263.6 kB JavaScript bundle (82.5 kB gzipped), and all 39 Python tests pass. A line-tracing measurement, made with a standard-library tracer because the usual tool could not be installed, showed that the tests run about 63.6% of the backend's lines, with user management (27%) and system routes (32%) least covered. A scripted browser session found that a wrong password gives no error message because the page reloads, and further checks found unhandled loading failures, non-proportional and gappy charts, form labels not associated with inputs, no front-end tests, and README instructions that no longer match the code, including a setting the backend ignores. None of these findings has been fixed in this project. No user evaluation was carried out.</p>
+<p><strong>Keywords:</strong> React; single-page application; analytics; software testing; code coverage</p>
+<p><strong>Note on the version of the code evaluated.</strong> All findings, test counts, coverage figures and line counts in this report were obtained against the code as committed (commit <code>a349fc6</code>). After that evaluation, uncommitted changes appeared in the working tree (<code>middleware.py</code>, <code>alerts.py</code>, <code>system.py</code>, <code>main.py</code>, <code>api.js</code>, <code>SystemHealth.jsx</code>, <code>conftest.py</code>, a new <code>tests/test_regressions.py</code> and a new front-end test). With those changes the backend suite has <strong>38 tests, all passing</strong>, and the front end has <strong>one</strong> test (<code>npm test</code>), which also passes. The changes appear to address the items listed below; this was established by reading the changes and running the tests, and the original probes were <strong>not</strong> re-run against the changed code. Where this report says a finding was "not fixed", it refers to the evaluated commit.</p>
+<p><em>Appear addressed in the working tree:</em> <strong>D-1</strong> (the backend now reads <code>CORS_ORIGINS</code>, so the README instruction takes effect), <strong>U-11</strong> in part (one front-end test now exists, for the alert socket helper), and the health page's connection card. <em>Still open as far as the changes show:</em> U-1 and U-2 (the 401 handler is unchanged, so the failed-login problem remains), U-3 to U-10, D-2 to D-4, and the low coverage of user management and system routes (coverage was not re-measured).</p>
+<div class="plain-title">ACKNOWLEDGEMENTS</div>
+
+<p><span class="todo">[Write acknowledgements here: supervisor, group members (AI/vision, backend and security, real-time and integration), family, and anyone who helped collect plate images. The author must write this; it is personal.]</span></p>
+<div class="plain-title">CONTENTS</div>
+
+<p><strong>Preliminary pages:</strong> Declaration · Approval · Abstract · Acknowledgements · List of Abbreviations and Acronyms · Note on Group Projects</p>
+<p><strong>1 Introduction</strong> — 1.1 Background and Context · 1.2 Problem Statement · 1.3 Project Aim · 1.4 Project Objectives · 1.5 Research Questions · 1.6 Scope of the Project (In Scope, Out of Scope) · 1.7 Significance · 1.8 Limitations · 1.9 Organisation of the Report</p>
+<p><strong>2 Literature Review</strong> — 2.1 Introduction · 2.2 Key Concepts and Theories · 2.3 Existing Systems / Related Work · 2.4 Comparative Analysis · 2.5 Research / Knowledge Gap · 2.6 Conceptual Framework · 2.7 Chapter Summary</p>
+<p><strong>3 Methodology</strong> — 3.1 Introduction · 3.2 Research / Development Approach · 3.3 Requirements / Data Collection · 3.4 System Architecture / Research Workflow · 3.5 Tools and Technologies · 3.6 Ethical and Legal Considerations · 3.7 Evaluation Method · 3.8 Chapter Summary</p>
+<p><strong>4 System Analysis and Design</strong> — 4.1 Introduction · 4.2 Stakeholder and User Analysis · 4.3 Functional Requirements · 4.4 Non-Functional Requirements · 4.5 Use Cases / User Stories · 4.6 System / Solution Architecture · 4.7 Database / Data Design · 4.8 Interface / Interaction Design · 4.9 Algorithms / Models / Technical Design · 4.10 Chapter Summary</p>
+<p><strong>5 Implementation / Development</strong> — 5.1 Introduction · 5.2 Development Environment · 5.3 System Components / Modules · 5.4 Key Implementation Details · 5.5 Integration · 5.6 Challenges and Solutions · 5.7 Individual Contribution · 5.8 Chapter Summary</p>
+<p><strong>6 Testing, Results and Evaluation</strong> — 6.1 Introduction · 6.2 Testing Strategy · 6.3 Test Cases and Results · 6.4 Experimental / Performance Results · 6.5 User Evaluation · 6.6 Analysis of Results · 6.7 Objective-by-Objective Evaluation · 6.8 Individual Results · 6.9 Chapter Summary</p>
+<p><strong>7 Discussion</strong> — 7.1 Introduction · 7.2 Interpretation of Findings · 7.3 Comparison with Existing Work · 7.4 Contributions of the Project · 7.5 Limitations and Implications · 7.6 Chapter Summary</p>
+<p><strong>8 Conclusion and Recommendations</strong> — 8.1 Introduction · 8.2 Summary of the Project · 8.3 Conclusions · 8.4 Achievement of Objectives · 8.5 Recommendations · 8.6 Future Work</p>
+<p><strong>References</strong></p>
+<p><strong>Appendices</strong> — A Individual Contribution Statement · B User Manual / Installation Guide · C Additional System Designs / Diagrams · D Additional Test Cases and Results · E Data Collection Instruments · F Additional Code / Configuration · G Other Supporting Material</p>
+<p><span class="todo">[Page numbers are not shown here. In Word, apply heading styles and use References → Table of Contents to generate a numbered contents page, and a List of Figures and List of Tables the same way.]</span></p>
+<div class="plain-title">LIST OF ABBREVIATIONS AND ACRONYMS</div>
+
+<table>
+<thead>
+<tr>
+<th>Abbreviation</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ALPR</td>
+<td>Automatic Licence Plate Recognition</td>
+</tr>
+<tr>
+<td>API</td>
+<td>Application Programming Interface</td>
+</tr>
+<tr>
+<td>CUDA</td>
+<td>Compute Unified Device Architecture (NVIDIA GPU computing platform)</td>
+</tr>
+<tr>
+<td>SPA</td>
+<td>Single-Page Application</td>
+</tr>
+<tr>
+<td>WCAG</td>
+<td>Web Content Accessibility Guidelines</td>
+</tr>
+<tr>
+<td>DBMS</td>
+<td>Database Management System</td>
+</tr>
+<tr>
+<td>GPU</td>
+<td>Graphics Processing Unit</td>
+</tr>
+<tr>
+<td>HTTP</td>
+<td>Hypertext Transfer Protocol</td>
+</tr>
+<tr>
+<td>IoU</td>
+<td>Intersection over Union</td>
+</tr>
+<tr>
+<td>JWT</td>
+<td>JSON Web Token</td>
+</tr>
+<tr>
+<td>mAP</td>
+<td>mean Average Precision</td>
+</tr>
+<tr>
+<td>MJPEG</td>
+<td>Motion JPEG (video stream format)</td>
+</tr>
+<tr>
+<td>ML</td>
+<td>Machine Learning</td>
+</tr>
+<tr>
+<td>OCR</td>
+<td>Optical Character Recognition</td>
+</tr>
+<tr>
+<td>SVDS</td>
+<td>Stolen Vehicle Detection System</td>
+</tr>
+<tr>
+<td>UI</td>
+<td>User Interface</td>
+</tr>
+<tr>
+<td>VRRS</td>
+<td>Vehicle Registry and Reporting System</td>
+</tr>
+<tr>
+<td>YOLO</td>
+<td>You Only Look Once (object detector family)</td>
+</tr>
+</tbody>
+</table>
+<div class="plain-title">NOTE ON GROUP PROJECTS</div>
+
+<p>Students who worked on a project as a group are strongly encouraged to prepare their own individual final reports rather than submitting identical reports. The project, system, dataset, or overall research problem may be shared, but each student's report should clearly demonstrate that student's own understanding, responsibilities, work, results, and contribution to the project.</p>
+<p>In particular, group-project students should:</p>
+<ul>
+<li>state the overall group project and explain how the individual work fits within it;</li>
+<li>clearly identify their own responsibilities and deliverables;</li>
+<li>focus detailed analysis, design, implementation, experiments, testing, and/or evaluation on their own contribution;</li>
+<li>acknowledge the work completed by other group members where it is discussed;</li>
+<li>include an <em>Individual Contribution Statement</em> in the appendices; and</li>
+<li>not claim another group member's work, results, code, data collection, or design decisions as their own.</li>
+</ul><h1>Chapter 1: Introduction</h1>
+<h2>1.1 Background and Context</h2>
+<p>Vehicle theft is a persistent problem for law enforcement in Zambia. Recovering a stolen vehicle depends heavily on chance: an officer happens to recognise a plate number from a paper report or a radio bulletin. Reports are kept on paper or in disconnected spreadsheets, so a report filed at one station is invisible to an officer elsewhere.</p>
+<p>This report describes <strong>SVDS</strong>, the Stolen Vehicle Detection System, built by a group of four students on top of the <strong>VRRS</strong> registry. The public files stolen-vehicle reports, a camera node reads plates from a phone's video stream and checks them against active reports, and police officers are alerted.</p>
+<p>None of this is usable unless people can reach it. Members of the public need a simple way to file and follow a report; officers need to search reports, activate them, mark vehicles recovered and act on alerts; administrators need to manage accounts and the system. Someone also has to show whether the system is <em>working and effective</em>, with statistics that are true, and to check that the parts of the system do what they claim. That is the work of the <strong>frontend, analytics, testing and documentation</strong> component, and this is the individual report of the student responsible for it.</p>
+<h2>1.2 Problem Statement</h2>
+<p>A registry that only its developers can operate does not solve the problem. The specific problems are:</p>
+<ol>
+<li><strong>Access.</strong> Three different groups of people (public, police, administrators) need three different, role-appropriate ways into the same data, on an ordinary browser.</li>
+<li><strong>Insight.</strong> Police and administrators need statistics (reports by status, recovery rate, recovery time, detections, alert confidence) that are computed from real records and are not misleading.</li>
+<li><strong>Assurance.</strong> The group needs evidence that the system behaves as intended, and a way to repeat that check as the code changes.</li>
+<li><strong>Usability of the project itself.</strong> Others must be able to install, run and understand the system.</li>
+</ol>
+<h2>1.3 Project Aim</h2>
+<p><strong>Group aim.</strong> To design, implement and evaluate SVDS: a vehicle registry and reporting web application integrated with a real-time, camera-based licence plate detection pipeline, for the Zambia Police Service and the public it serves.</p>
+<p><strong>Individual aim (Frontend, analytics, testing and documentation).</strong> To build the three role-based web portals and the analytics that feed them, to verify the system with automated tests, and to document how to run it, and to evaluate these honestly.</p>
+<h2>1.4 Project Objectives</h2>
+<h3>Group objectives</h3>
+<ol>
+<li>Role-based accounts (Reportee, Police, Admin) with scoped access.</li>
+<li>Public filing and tracking of stolen-vehicle reports.</li>
+<li>A live view of alerts, the registry and analytics for police.</li>
+<li>Administrator control of accounts, system health and the audit trail.</li>
+<li>Detection and reading of plates from a live camera feed, matched against active reports.</li>
+<li>Real-time alerts to connected police clients.</li>
+</ol>
+<h3>Individual objectives (Frontend, analytics, testing and documentation)</h3>
+<table>
+<thead>
+<tr>
+<th>No.</th>
+<th>Objective</th>
+<th>Measure of success</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>U1</td>
+<td>Build a single-page web application with separate Reportee, Police and Admin portals and route guards that mirror the server's roles</td>
+<td>Fourteen pages; each role sees only its own navigation</td>
+</tr>
+<tr>
+<td>U2</td>
+<td>Let the public register, log in, file a report, view their reports and edit their profile</td>
+<td>The flows work against the real API</td>
+</tr>
+<tr>
+<td>U3</td>
+<td>Let police search and filter the registry, activate reports, mark vehicles found, and review and clear alerts</td>
+<td>The flows work against the real API</td>
+</tr>
+<tr>
+<td>U4</td>
+<td>Let administrators manage users and view the audit log and system health</td>
+<td>The flows work against the real API</td>
+</tr>
+<tr>
+<td>U5</td>
+<td>Provide analytics endpoints and a page whose numbers are computed from real records, including correct handling of mixed confidence scales</td>
+<td>Values match the data in tests</td>
+</tr>
+<tr>
+<td>U6</td>
+<td>Verify the system with an automated test suite and measure how much of the backend it exercises</td>
+<td>Suite passes; coverage measured</td>
+</tr>
+<tr>
+<td>U7</td>
+<td>Document how to install and run the system, and provide a run script</td>
+<td>Written guide and one-command start</td>
+</tr>
+<tr>
+<td>U8</td>
+<td>Evaluate the interface and analytics honestly and record defects</td>
+<td>Build verified; a browser check; findings listed</td>
+</tr>
+</tbody>
+</table>
+<h2>1.5 Research Questions</h2>
+<ol>
+<li>Can a single-page application with client-side route guards give each role only the interface it needs, while leaving the real enforcement to the server?</li>
+<li>Are the analytics figures shown to users correct and unambiguous, and where are they not?</li>
+</ol>
+<h2>1.6 Scope of the Project</h2>
+<h3>1.6.1 In Scope</h3>
+<ul>
+<li><strong>This report:</strong> the React front end (14 pages, shared layouts, contexts, API client), the analytics endpoints and the page that shows them, the confidence-scale normalisation fix, the backend and node automated tests as a body of evidence, and the run script and documentation.</li>
+<li><strong>Group:</strong> the whole system.</li>
+</ul>
+<h3>1.6.2 Out of Scope</h3>
+<ul>
+<li>The detection model and camera node (AI/vision member).</li>
+<li>Authentication, roles, the data model and report rules on the server (backend member).</li>
+<li>The WebSocket alert channel, camera status, feed proxy and health endpoint (real-time member). The pages consume them, but their design is covered in that member's report.</li>
+<li>A native mobile app, accessibility certification and internationalisation.</li>
+</ul>
+<h2>1.7 Significance of the Project</h2>
+<p>The interface is how the Zambia Police Service and the public meet the system. A clear reporting flow makes reports more complete, and an honest analytics page tells officers whether the system is actually recovering vehicles. A test suite and written instructions let the system be maintained after the students leave.</p>
+<h2>1.8 Limitations</h2>
+<ul>
+<li><strong>No automated front-end tests.</strong> The interface was checked by building it, reading the code and one scripted browser session; there is no unit, component or browser test suite.</li>
+<li><strong>Limited browser evidence.</strong> One scripted headless-browser check (the login failure in §6.4) was run for this report. Fifteen screenshots of the running application were captured earlier. No cross-browser, mobile or screen-reader testing was done.</li>
+<li><strong>Coverage is approximate.</strong> Line coverage was measured with a small tracer built on Python's standard library because the usual coverage tool could not be installed offline; figures may differ slightly from the standard tool.</li>
+<li><strong>No user evaluation.</strong> No member of the public or officer used the interface for this report.</li>
+<li><strong>Test authorship.</strong> The tests exercise other members' code; who wrote each file should be confirmed by the student (Appendix A).</li>
+</ul>
+<h2>1.9 Organisation of the Report</h2>
+<p>Chapter 2 reviews single-page applications, client-side access control, analytics and testing concepts. Chapter 3 describes the method and tools. Chapter 4 gives the analysis and design. Chapter 5 describes the implementation. Chapter 6 presents testing, browser findings and analytics checks. Chapter 7 discusses them, Chapter 8 concludes, and the appendices contain the contribution statement, user manual, extra designs, test evidence and code.</p><h1>Chapter 2: Literature Review</h1>
+<h2>2.1 Introduction</h2>
+<p>This chapter reviews the concepts behind the front end, analytics and testing work: single-page applications, client-side routing and access control, token storage, presenting statistics honestly, and software testing. It then reviews related tools and identifies the gap.</p>
+<h2>2.2 Key Concepts and Theories</h2>
+<h3>2.2.1 Single-page applications and React</h3>
+<p>A <strong>single-page application (SPA)</strong> loads once and then updates the page in the browser, calling a server API for data. <strong>React</strong> builds interfaces from components, small functions that return what the screen should show for the current state. <strong>React Router</strong> maps URLs to components in the browser. <strong>Vite</strong> is a build tool and development server; <code>vite build</code> produces static files that can be served by any web server.</p>
+<h3>2.2.2 State and context</h3>
+<p>State is data that changes what is shown. React's <strong>context</strong> shares state (for example, the logged-in user) with many components without passing it through each one. SVDS uses two contexts: one for the signed-in user and one for alerts.</p>
+<h3>2.2.3 Client-side access control</h3>
+<p>A route guard in the browser hides pages a role should not see. It improves usability but is <strong>not security</strong>: a determined user can call the API directly, and the browser's code is visible. Real enforcement must be on the server. Guards should mirror the server's rules so users are not shown controls that will fail.</p>
+<h3>2.2.4 Token storage in the browser</h3>
+<p>A token can be kept in <code>localStorage</code> (simple, survives reloads, readable by any script on the page and so exposed to cross-site scripting), in an HTTP-only cookie (not readable by scripts, but needs protection against cross-site request forgery), or in memory (safest, lost on reload). React escapes text by default, which reduces cross-site scripting risk.</p>
+<h3>2.2.5 Presenting statistics</h3>
+<p>Analytics are only useful if they are correct and unambiguous. Common pitfalls are: mixing units (a fraction and a percentage), dividing by the wrong base (a "recovery rate" whose denominator includes cases not yet worked), charts whose axes do not start at zero or that hide empty periods, and counting things by searching text instead of recording them.</p>
+<h3>2.2.6 Testing concepts</h3>
+<p><strong>Unit tests</strong> check small pieces in isolation; <strong>integration tests</strong> check parts working together (here, the real API routes with a test database); <strong>regression tests</strong> keep a fixed bug from returning; <strong>end-to-end tests</strong> drive the whole system through the interface. <strong>Code coverage</strong> measures which lines a test suite runs. It shows what is <em>untested</em>, not what is <em>correct</em>: a line can run without its result being checked.</p>
+<h3>2.2.7 Accessibility</h3>
+<p>The Web Content Accessibility Guidelines (WCAG) ask, among other things, that form fields have programmatically associated labels so assistive technology can announce them, and that errors are visible and identified in text.</p>
+<h2>2.3 Existing Systems / Related Work</h2>
+<ul>
+<li><strong>Component libraries and admin frameworks</strong> (Material UI, Ant Design, React-Admin) give ready-made tables, forms and charts. This project hand-writes its layout and charts with plain CSS, which keeps dependencies to four runtime packages (React, React DOM, React Router, Axios) at the cost of building and testing everything itself.</li>
+<li><strong>Charting libraries</strong> (Chart.js, Recharts) handle scales, axes and empty periods. This project draws bars and a donut with CSS.</li>
+<li><strong>Testing tools:</strong> pytest for Python; Jest and React Testing Library for components; Playwright or Cypress for browser tests. Only pytest is used here.</li>
+<li><strong>Coverage tools:</strong> coverage.py is the standard for Python.</li>
+<li><strong>Existing police records interfaces</strong> are mostly closed, so no comparison of interface quality is possible.</li>
+</ul>
+<p><em>Note on sources.</em> This chapter relies on public documentation and standards listed in the References. No usability figures from other systems are quoted.</p>
+<h2>2.4 Comparative Analysis</h2>
+<table>
+<thead>
+<tr>
+<th>Criterion</th>
+<th>This project</th>
+<th>With a component and chart library</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Runtime dependencies</td>
+<td>4</td>
+<td>Many more</td>
+</tr>
+<tr>
+<td>Bundle size (measured)</td>
+<td>263.6 kB JS, 13.5 kB CSS (82.5 kB JS gzipped)</td>
+<td>Typically larger</td>
+</tr>
+<tr>
+<td>Chart correctness handled for you</td>
+<td>No (hand-written)</td>
+<td>Mostly yes</td>
+</tr>
+<tr>
+<td>Accessibility built in</td>
+<td>No</td>
+<td>Partly</td>
+</tr>
+<tr>
+<td>Effort to build</td>
+<td>Higher per feature</td>
+<td>Lower</td>
+</tr>
+<tr>
+<td>Automated front-end tests</td>
+<td>None</td>
+<td>Usually added</td>
+</tr>
+</tbody>
+</table>
+<p>The bundle figures are from the production build run for this report; the right-hand column is a general expectation, not a measurement.</p>
+<h2>2.5 Research / Knowledge Gap</h2>
+<p>Student projects often show screenshots and stop. The gap this report addresses is an <strong>evaluation of the interface and analytics against their own claims</strong>: what the numbers mean, where they can mislead, and what a real browser does when things go wrong, together with a measured statement of what the test suite does and does not cover.</p>
+<h2>2.6 Conceptual Framework</h2>
+<pre><code>browser (React SPA) --Axios + Bearer token--&gt; API --&gt; analytics queries --&gt; numbers on screen
+     |                                                     ^
+  route guards (mirror the server's roles)                 |
+  contexts: user, alerts                          tests check the numbers and the rules
+</code></pre>
+<p>The interface reflects the server's rules; the analytics turn records into figures; the tests check both.</p>
+<h2>2.7 Chapter Summary</h2>
+<p>The front end is a small hand-built React SPA. Route guards and hand-written charts are simple and keep dependencies low, but shift responsibility for correctness, accessibility and testing onto the team. The rest of the report evaluates how well that responsibility was met.</p><h1>Chapter 3: Methodology</h1>
+<h2>3.1 Introduction</h2>
+<p>This chapter explains how the front end, analytics, tests and documentation were developed and evaluated: the approach, requirements, architecture, tools, ethics and evaluation method.</p>
+<h2>3.2 Research / Development Approach</h2>
+<p>The project was built <strong>iteratively</strong>. The front end was developed against the running API: each page was built, tried in the browser against the real backend, and adjusted. Analytics endpoints were written alongside the page that shows them, so each chart had real data behind it from the start; the project's working rule was that a statistic on screen must be computed from stored records, not typed in.</p>
+<p>Testing followed a <strong>find, fix, lock-in</strong> pattern for defects: a suspected defect was checked against the running system, fixed, and covered by a regression test (for example the confidence-scale fix, §5.4.2). For this report a further <strong>verify-what-was-claimed</strong> step was added: the production build was run, coverage was measured, suspected interface and analytics defects were checked in a real browser or with probe tests, and only observed behaviour was recorded.</p>
+<pre><code>Requirements → Design → Implementation → Integration → Testing / Evaluation → (issues found? back)
+</code></pre>
+<h2>3.3 Requirements / Data Collection</h2>
+<p>Requirements came from (a) the gap in Chapter 1, (b) the three groups of users and what each needs to do, and (c) what the server offers. No interviews, surveys or usability sessions are recorded, so the requirements are the group's own analysis.</p>
+<p>The analytics use the system's own records: reports, alerts, users and the audit log. Test data is synthetic. Screenshots of the running system (Chapter 4) were captured earlier from the live application with demonstration accounts.</p>
+<h2>3.4 System Architecture / Research Workflow</h2>
+<p><img alt="Figure 3.1: SVDS system architecture" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/04-system-design-1.png" /></p>
+<p>The front end is one of three independent processes; it talks to the backend by HTTPS/JSON with a Bearer token and by WebSocket for alerts.</p>
+<h2>3.5 Tools and Technologies</h2>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Technology</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Front end</td>
+<td>React 18.2, React Router 6.22, Axios 1.6 (the only runtime dependencies)</td>
+</tr>
+<tr>
+<td>Build and dev server</td>
+<td>Vite 5 with <code>@vitejs/plugin-react</code>; dev server on port 5173</td>
+</tr>
+<tr>
+<td>Styling</td>
+<td>One hand-written stylesheet (<code>styles.css</code>, 1,084 lines) plus inline styles on the login and register pages</td>
+</tr>
+<tr>
+<td>Charts</td>
+<td>Hand-made with CSS (bars, conic-gradient donut); no charting library</td>
+</tr>
+<tr>
+<td>Analytics queries</td>
+<td>SQLAlchemy aggregate queries in FastAPI routes</td>
+</tr>
+<tr>
+<td>Testing</td>
+<td>pytest with FastAPI <code>TestClient</code>; Python's standard-library tracing for approximate line coverage</td>
+</tr>
+<tr>
+<td>Browser check</td>
+<td>Headless Chrome driven over the DevTools Protocol from a short Python script</td>
+</tr>
+<tr>
+<td>Documentation and start-up</td>
+<td><code>README.md</code>, <code>run-all.ps1</code></td>
+</tr>
+<tr>
+<td>OS</td>
+<td>Windows 11</td>
+</tr>
+</tbody>
+</table>
+<h2>3.6 Ethical and Legal Considerations</h2>
+<ul>
+<li><strong>Personal data on screen.</strong> Pages show names, telephone numbers, plates and locations. Server-side role checks decide who receives them; the interface's guards only avoid showing controls that would fail.</li>
+<li><strong>Token storage.</strong> The token is kept in the browser's <code>localStorage</code> (readable by any script running on the page). React escapes displayed text and the code does not use <code>dangerouslySetInnerHTML</code>, which lowers, but does not remove, the risk.</li>
+<li><strong>Analytics honesty.</strong> Statistics can mislead officers and the public if they are wrongly defined or drawn. §6.4 records where they can.</li>
+<li><strong>Accessibility.</strong> Fields without associated labels are hard for screen-reader users; this was checked on the login page (§6.4).</li>
+<li><strong>Responsible testing.</strong> The browser check used a made-up email address and password, which the server rejected; nothing was written to the database. Probes ran on an in-memory database. Servers started for the check were stopped afterwards.</li>
+<li><strong>Test data.</strong> Tests use synthetic names and plates.</li>
+</ul>
+<h2>3.7 Evaluation Method</h2>
+<ol>
+<li><strong>Build check:</strong> run the production build and record its output.</li>
+<li><strong>Automated tests:</strong> run the 31-test backend suite and 8-test node suite; measure line coverage of the backend package.</li>
+<li><strong>Browser check:</strong> start the backend and dev server, drive headless Chrome through a failed login, and record what appears and what network calls are made.</li>
+<li><strong>Analytics probes:</strong> temporary tests with edge-case data to see what each analytics endpoint returns.</li>
+<li><strong>Code review</strong> of the pages for error handling, keys, labels and search behaviour.</li>
+<li><strong>Objective-by-objective review</strong> against U1 to U8 in §1.4.</li>
+</ol>
+<p>Not done: cross-browser, mobile, load, screen-reader or user evaluation.</p>
+<h2>3.8 Chapter Summary</h2>
+<p>The interface and analytics were built against the live API and checked by running the build, the tests, a scripted browser session and edge-case probes. What was and was not observed is stated in Chapter 6.</p><h1>Chapter 4: System Analysis and Design</h1>
+<h2>4.1 Introduction</h2>
+<p>Stakeholders and the architecture are shared by the group. The requirements, interface design and analytics design below are those of the <strong>frontend, analytics, testing and documentation</strong> component.</p>
+<h2>4.2 Stakeholder and User Analysis</h2>
+<table>
+<thead>
+<tr>
+<th>Stakeholder</th>
+<th>Goal</th>
+<th>What the interface must give</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Reportee (public)</td>
+<td>Report a theft and follow it</td>
+<td>Simple registration and login; a report form; a list of their own reports with status; profile editing</td>
+</tr>
+<tr>
+<td>Police officer</td>
+<td>Recover vehicles</td>
+<td>Registry search and filter; activate and mark found; live alerts to review or dismiss; camera view; analytics</td>
+</tr>
+<tr>
+<td>Administrator</td>
+<td>Run the system</td>
+<td>User list with role and account controls; audit log; system health</td>
+</tr>
+<tr>
+<td>Maintainer</td>
+<td>Keep the system working</td>
+<td>Tests, documentation, one-command start</td>
+</tr>
+</tbody>
+</table>
+<h2>4.3 Functional Requirements</h2>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Requirement</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>FR-U1</td>
+<td>Login and registration pages; after login, redirect to the portal for the user's role.</td>
+</tr>
+<tr>
+<td>FR-U2</td>
+<td>Route guards: reportee pages require any signed-in user; police pages require police or admin; admin pages require admin; otherwise redirect to the user's home.</td>
+</tr>
+<tr>
+<td>FR-U3</td>
+<td>Reportee portal: home, report-vehicle form, my reports (with status), profile (edit details, change password).</td>
+</tr>
+<tr>
+<td>FR-U4</td>
+<td>Police portal: vehicle registry with search and status filter and activate / mark-found actions; live alerts with mark-read, mark-all-read and false-positive; cameras; analytics.</td>
+</tr>
+<tr>
+<td>FR-U5</td>
+<td>Admin portal: overview, user management (invite police, change role, deactivate, delete), system health, audit log.</td>
+</tr>
+<tr>
+<td>FR-U6</td>
+<td>Attach the token to every API request; on an authentication failure clear the session and go to the login page.</td>
+</tr>
+<tr>
+<td>FR-U7</td>
+<td>Analytics endpoints for summary counts, reports per month, status breakdown, detections per camera, alerts over time, recovery time and user growth.</td>
+</tr>
+<tr>
+<td>FR-U8</td>
+<td>Every figure shown by analytics is computed from stored records. Confidence scores stored on different scales are normalised before averaging.</td>
+</tr>
+<tr>
+<td>FR-U9</td>
+<td>The repository has instructions for installing and running each part, and a script that starts all three.</td>
+</tr>
+</tbody>
+</table>
+<h2>4.4 Non-Functional Requirements</h2>
+<ul>
+<li><strong>Consistency with the server:</strong> the interface's role rules mirror the server's, which remains the authority.</li>
+<li><strong>Simplicity and low dependency count:</strong> four runtime packages.</li>
+<li><strong>Clarity:</strong> errors from the server are shown to the user in plain text where the code handles them.</li>
+<li><strong>Correctness of statistics:</strong> unambiguous definitions; mixed units handled.</li>
+<li><strong>Repeatability:</strong> tests can be run with one command and do not touch the real database.</li>
+<li><strong>Maintainability:</strong> shared layouts (<code>PortalLayout</code>, <code>ReporteeLayout</code>), one API module, two contexts.</li>
+</ul>
+<h2>4.5 Use Cases / User Stories</h2>
+<p><strong>UC-U1: A member of the public reports a theft.</strong> They register, log in, fill in the report form (plate, vehicle details, incident date, last seen, description), submit, and later see the report in "My reports" with its status.</p>
+<p><strong>UC-U2: An officer works a report.</strong> They search the registry by plate or owner, filter by status, activate an under-review report so cameras can match it, and mark it found when the vehicle is recovered.</p>
+<p><strong>UC-U3: An officer reviews alerts.</strong> They open Live alerts, see unread items, and mark them read, mark all read, or flag a false positive.</p>
+<p><strong>UC-U4: An officer reviews performance.</strong> On Analytics they see totals, average recovery time, average detection confidence, false positives, reports per month, the status breakdown and detections by location.</p>
+<p><strong>UC-U5: An administrator manages users.</strong> They invite a police officer, change a role, deactivate an account or delete one, and read the audit log.</p>
+<p><strong>User story.</strong> <em>As a police commander, I want the recovery rate and average confidence on the analytics page to be computed from real records, so that I can trust them when reporting to my superiors.</em></p>
+<h2>4.6 System / Solution Architecture</h2>
+<pre><code>src/
+  main.jsx, App.jsx           entry point, providers, routes with role guards
+  context/AuthContext.jsx     signed-in user, login/logout, session restore
+  context/AlertsContext.jsx   alert connection and unread count (real-time member)
+  services/api.js             Axios instance, token header, 401 handler, API groups
+  components/                 ProtectedRoute, PortalLayout, ReporteeLayout, NotificationToast
+  config/policeNav.js         police navigation with unread badge
+  pages/                      Login, Register, reportee/, police/, admin/  (14 pages)
+</code></pre>
+<p><code>App.jsx</code> wraps everything in <code>AuthProvider</code> and <code>AlertsProvider</code>, mounts the toast once, and declares fourteen routes, each inside a <code>Guard</code> with the roles allowed.</p>
+<p><img alt="Figure 4.1: role-based route access" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/04-system-design-5.png" /></p>
+<h2>4.7 Database / Data Design</h2>
+<p>The front end has no database. The analytics read the backend's four tables (users, reports, alerts, audit log), whose design is in the backend member's report (Appendix C). The analytics <strong>derived values</strong> are defined here:</p>
+<table>
+<thead>
+<tr>
+<th>Figure</th>
+<th>Definition in the code</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Recovery rate</td>
+<td><code>found / total reports × 100</code>, where total includes <code>under_review</code> and <code>missing</code> reports</td>
+</tr>
+<tr>
+<td>Average recovery time</td>
+<td>Mean of <code>(resolved_date − report_date)</code> in whole days over reports that are found and have a resolved date</td>
+</tr>
+<tr>
+<td>Average detection confidence</td>
+<td>Mean of normalised confidence over <strong>all</strong> alerts, including ones later flagged as false positives</td>
+</tr>
+<tr>
+<td>False positives</td>
+<td>Number of audit-log rows whose text contains "false positive"</td>
+</tr>
+<tr>
+<td>Reports per month</td>
+<td>Count of reports by calendar month for the last <em>n × 30</em> days; months with no reports are omitted</td>
+</tr>
+<tr>
+<td>Alerts over time</td>
+<td>Count of alerts per day for the last <em>n</em> days; days with none are omitted</td>
+</tr>
+<tr>
+<td>Detections per node</td>
+<td>Alert counts grouped by camera id <strong>and</strong> location text</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Confidence normalisation.</strong> Older detections stored confidence as a fraction (0 to 1) and the current camera node stores a percentage (0 to 100). Every average first converts any value at or below 1 to a percentage (<code>value × 100</code>).</p>
+<h2>4.8 Interface / Interaction Design</h2>
+<p>The pages were captured from the running application. They are reproduced here as evidence of the interface.</p>
+<p><img alt="Figure 4.2: Login" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/login.png" /></p>
+<p><img alt="Figure 4.3: Register" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/register.png" /></p>
+<p><img alt="Figure 4.4: Reportee home" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/reportee-home.png" /></p>
+<p><img alt="Figure 4.5: Report vehicle" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/report-vehicle.png" /></p>
+<p><img alt="Figure 4.6: My reports" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/my-reports.png" /></p>
+<p><img alt="Figure 4.7: Police home (vehicle registry)" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/police-home.png" /></p>
+<p><img alt="Figure 4.8: Live alerts" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/alerts.png" /></p>
+<p><img alt="Figure 4.9: Analytics" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/analytics.png" /></p>
+<p><img alt="Figure 4.10: Admin overview" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/admin-home.png" /></p>
+<p><img alt="Figure 4.11: User management" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/user-management.png" /></p>
+<p><img alt="Figure 4.12: Audit log" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/audit-log.png" /></p>
+<p>Further screens (profile, cameras, system health, interactive API documentation) are in Appendix C.</p>
+<p><strong>Interaction design choices:</strong> each role has its own navigation (police navigation shows an unread badge); a toast notification appears on any page; forms show server error text; the register page validates fields in the browser before sending; destructive user deletion asks for confirmation.</p>
+<h2>4.9 Algorithms / Models / Technical Design</h2>
+<ul>
+<li><strong>Route guard:</strong> <code>ProtectedRoute</code> waits for the session to load, redirects to login if no user, and redirects to the user's own home if their role is not allowed.</li>
+<li><strong>Session restore:</strong> on load, the saved user and token are read from <code>localStorage</code>, the user is set at once, and <code>GET /users/me</code> refreshes it; failure logs the user out.</li>
+<li><strong>Request pipeline:</strong> an Axios request interceptor adds the token; a response interceptor treats any HTTP 401 as an expired session (clear storage, go to <code>/login</code>).</li>
+<li><strong>Search:</strong> the registry sends a request on each keystroke with the current search and status.</li>
+<li><strong>Charts:</strong> bar height = <code>max(20, min(count × 10, 170))</code> pixels; the donut is a CSS conic gradient from rounded percentages of found and missing (the remainder is drawn as "under review").</li>
+<li><strong>Analytics queries:</strong> SQL aggregates with <code>func.count</code>, <code>func.avg</code>, <code>func.date</code> and <code>extract</code>; the confidence normalisation is one shared expression.</li>
+</ul>
+<h2>4.10 Chapter Summary</h2>
+<p>The front end is fourteen guarded pages over one API module and two contexts. Analytics figures have explicit definitions in the code, and a shared expression normalises confidence scales. The evaluation in Chapter 6 tests those definitions against edge cases.</p><h1>Chapter 5: Implementation / Development</h1>
+<h2>5.1 Introduction</h2>
+<p>This chapter describes how the front end, analytics, tests and documentation were built, how they connect to the other members' work, the problems met, and the student's contribution.</p>
+<h2>5.2 Development Environment</h2>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Machine</td>
+<td>Windows 11 PC</td>
+</tr>
+<tr>
+<td>Front end</td>
+<td>Node.js with npm; Vite 5.4 (the production build in §6.4 ran with Vite 5.4.21)</td>
+</tr>
+<tr>
+<td>Backend for tests</td>
+<td>Python 3.12 virtual environment with pytest</td>
+</tr>
+<tr>
+<td>Browser</td>
+<td>Google Chrome (development, and headless for the scripted check)</td>
+</tr>
+<tr>
+<td>Version control</td>
+<td>Git</td>
+</tr>
+</tbody>
+</table>
+<h2>5.3 System Components / Modules</h2>
+<table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Size</th>
+<th>Purpose</th>
+<th>Built by</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>vrrs-frontend/src</code> (24 JS/JSX files)</td>
+<td>1,786 lines</td>
+<td>The React application</td>
+<td>Frontend (this report)</td>
+</tr>
+<tr>
+<td><code>src/styles.css</code></td>
+<td>1,084 lines</td>
+<td>All styling</td>
+<td>Frontend (this report)</td>
+</tr>
+<tr>
+<td><code>services/api.js</code></td>
+<td></td>
+<td>Axios instance, token header, 401 handler, grouped API calls</td>
+<td>Frontend (this report)</td>
+</tr>
+<tr>
+<td><code>context/AuthContext.jsx</code>, <code>components/ProtectedRoute.jsx</code>, <code>App.jsx</code></td>
+<td></td>
+<td>Session and guards</td>
+<td>Frontend (this report)</td>
+</tr>
+<tr>
+<td><code>context/AlertsContext.jsx</code>, <code>components/NotificationToast.jsx</code>, <code>createAlertSocket</code></td>
+<td></td>
+<td>Alert connection and toast</td>
+<td>Real-time member</td>
+</tr>
+<tr>
+<td><code>app/routers/analytics.py</code></td>
+<td>87 lines</td>
+<td>Seven analytics endpoints</td>
+<td>Frontend/analytics (this report)</td>
+</tr>
+<tr>
+<td><code>vrrs-backend/tests/</code>, <code>vrrs-node/tests/</code></td>
+<td>31 + 8 tests</td>
+<td>Automated tests</td>
+<td>See §5.7</td>
+</tr>
+<tr>
+<td><code>README.md</code>, <code>run-all.ps1</code></td>
+<td>91 lines</td>
+<td>Documentation and start-up</td>
+<td>Frontend/documentation (this report), with <code>run-all.ps1</code> also described in the real-time report</td>
+</tr>
+</tbody>
+</table>
+<h2>5.4 Key Implementation Details</h2>
+<h3>5.4.1 Routing and guards</h3>
+<pre><code class="language-jsx">const Guard = ({ roles, children }) =&gt; &lt;ProtectedRoute allowedRoles={roles}&gt;{children}&lt;/ProtectedRoute&gt;;
+&lt;Route path=&quot;/police/alerts&quot; element={&lt;Guard roles={[&quot;police&quot;,&quot;admin&quot;]}&gt;&lt;Alerts /&gt;&lt;/Guard&gt;} /&gt;
+&lt;Route path=&quot;/admin/users&quot;   element={&lt;Guard roles={[&quot;admin&quot;]}&gt;&lt;UserManagement /&gt;&lt;/Guard&gt;} /&gt;
+</code></pre>
+<p><code>ProtectedRoute</code> shows "Loading..." while the session loads, redirects to <code>/login</code> if nobody is signed in, and redirects to the user's own home if the role is not allowed. Reportee routes allow all three roles, so officers and admins can also file reports.</p>
+<h3>5.4.2 Analytics and the confidence fix</h3>
+<p>All averages use one expression:</p>
+<pre><code class="language-python">NORMALIZED_CONFIDENCE = case(
+    (Alert.confidence_score &lt;= 1, Alert.confidence_score * 100),
+    else_=Alert.confidence_score,
+)
+</code></pre>
+<p><strong>The defect.</strong> Detections from a retired standalone script stored confidence as a fraction (0.9), while the camera node stores a percentage (90.1). On the live database, rows for the old camera ids averaged about 0.9 and rows for the current node about 87, so averaging the raw column reported roughly 30 instead of about 87. <strong>The fix</strong> scales any value at or below 1 up to a percentage before averaging, and was chosen over rewriting the old rows so historical data stays untouched. Two regression tests cover it: a mixed 0.8 and 60.0 pair must average 70.0, and a lone 0.5 must display as 50.0. The same expression is used in the camera status code (real-time member).</p>
+<p>The other analytics endpoints are direct SQL aggregates (counts by status, by month, by day, by camera; mean recovery time in Python over found reports).</p>
+<h3>5.4.3 The API module</h3>
+<p><code>api.js</code> builds one Axios instance whose base address comes from <code>VITE_API_BASE_URL</code>, adds <code>Authorization: Bearer &lt;token&gt;</code> from <code>localStorage</code>, and groups calls into <code>authAPI</code>, <code>reportsAPI</code>, <code>alertsAPI</code>, <code>usersAPI</code>, <code>analyticsAPI</code> and <code>systemAPI</code>. A response interceptor treats any 401 as an expired session: it clears <code>localStorage</code> and sets <code>window.location.href = "/login"</code>. (This behaviour is the cause of finding U-1, §6.4.)</p>
+<h3>5.4.4 Pages</h3>
+<ul>
+<li><strong>Registry (<code>PoliceHome</code>):</strong> loads reports and the summary, sends a new request on each search or status change, and calls activate and mark-found then reloads the list.</li>
+<li><strong>Alerts:</strong> loads unread or all alerts with a page size, prepends live events, and updates the unread count when items are cleared.</li>
+<li><strong>Analytics:</strong> loads five endpoints together, shows an error box with a Retry button if any fails, and draws the bars and donut.</li>
+<li><strong>Report vehicle:</strong> upper-cases and trims the plate, sends <code>null</code> for an empty incident date, and shows the server's error message on failure.</li>
+<li><strong>Register:</strong> validates fields (including matching passwords) in the browser before sending.</li>
+<li><strong>User management:</strong> search and role filter; invite, role change, activate/deactivate, delete with a confirmation dialog.</li>
+</ul>
+<h3>5.4.5 Tests and documentation</h3>
+<p>The backend tests use FastAPI's <code>TestClient</code> with an in-memory SQLite database, an overridden database dependency, and fixtures that create users and tokens for each role (Chapter 6 of the backend report describes the set-up). The node tests cover the pure plate functions. <code>README.md</code> gives quick-start steps, the role table, the API list and the camera-node contract; <code>run-all.ps1</code> starts all three programs.</p>
+<h2>5.5 Integration</h2>
+<ul>
+<li><strong>With the backend:</strong> every API group in <code>api.js</code> maps to a backend router; the login response supplies the token, role and redirect path.</li>
+<li><strong>With the real-time member:</strong> the alerts context and toast are mounted by <code>App.jsx</code>; the Cameras and System Health pages call the status endpoints.</li>
+<li><strong>With the AI/vision member:</strong> the node's confidence scale (percentage) is what the analytics normalisation assumes.</li>
+<li><strong>Configuration:</strong> <code>VITE_API_BASE_URL</code> and <code>VITE_WS_URL</code> in the front-end <code>.env</code>.</li>
+</ul>
+<h2>5.6 Challenges and Solutions</h2>
+<table>
+<thead>
+<tr>
+<th>Challenge</th>
+<th>Cause</th>
+<th>Solution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Analytics average confidence was wrong (about 30 instead of 87)</td>
+<td>Two storage scales in one column</td>
+<td>Normalise in SQL before averaging; two regression tests</td>
+</tr>
+<tr>
+<td>Charts and numbers had to come from real data</td>
+<td>Early versions used fixed sample values</td>
+<td>Every figure is computed by an endpoint; empty states ("No detections yet") handled</td>
+</tr>
+<tr>
+<td>Each role needs its own navigation and layout</td>
+<td>Three audiences on one app</td>
+<td>Shared <code>PortalLayout</code>, <code>ReporteeLayout</code>, and a <code>policeNav</code> config</td>
+</tr>
+<tr>
+<td>Browser cannot send a header on a WebSocket or <code>&lt;img&gt;</code></td>
+<td>Browser limits</td>
+<td>Query-string token (discussed in the real-time report)</td>
+</tr>
+<tr>
+<td>Tests must not touch PostgreSQL</td>
+<td><code>database.py</code> connects at import</td>
+<td>Dependency override with in-memory SQLite (backend report)</td>
+</tr>
+<tr>
+<td>Getting three programs to run together</td>
+<td>Separate environments</td>
+<td><code>run-all.ps1</code> and README steps (with the gaps listed in §6.4)</td>
+</tr>
+</tbody>
+</table>
+<h2>5.7 Individual Contribution (group project)</h2>
+<p>The student was responsible for <strong>work areas 6 and 7</strong> of the group's seven (Appendix A):</p>
+<ul>
+<li>the React front end: routing and guards, the API module, the three portals and their fourteen pages, shared layouts and the stylesheet;</li>
+<li>the analytics endpoints, the analytics page, and the confidence-scale fix with its regression tests;</li>
+<li>the automated test suites as a body of evidence (running, extending and reporting them), and the coverage measurement in this report;</li>
+<li>the README and the run script;</li>
+<li>the evaluation in Chapter 6.</li>
+</ul>
+<p>Work by others that this component uses, <strong>not claimed here</strong>: the token, roles, data model and report rules (backend member); the alert channel, camera status, feed proxy and health endpoint (real-time member); the detection model and camera node (AI/vision member).</p>
+<p><em>Test authorship.</em> The role split assigned "tests" to this role, but the suites also test other members' code. <strong>The student should state which test files they wrote themselves</strong>; this report claims the analytics tests, the running and measuring of the suites, and the coverage analysis.</p>
+<h2>5.8 Chapter Summary</h2>
+<p>The front end is a small hand-written React application with fourteen guarded pages. The analytics are SQL aggregates with one shared confidence normalisation, fixed after a real defect. Tests and documentation were assembled around them.</p><h1>Chapter 6: Testing, Results and Evaluation</h1>
+<h2>6.1 Introduction</h2>
+<p>This chapter reports what was measured and observed for the front end, analytics, tests and documentation. Every result comes from a command or script run while preparing this report. Temporary probe tests were deleted after running, so the shipped suites are unchanged.</p>
+<h3>6.1.1 Version of the code evaluated</h3>
+<p><strong>Note on the version of the code evaluated.</strong> All findings, test counts, coverage figures and line counts in this report were obtained against the code as committed (commit <code>a349fc6</code>). After that evaluation, uncommitted changes appeared in the working tree (<code>middleware.py</code>, <code>alerts.py</code>, <code>system.py</code>, <code>main.py</code>, <code>api.js</code>, <code>SystemHealth.jsx</code>, <code>conftest.py</code>, a new <code>tests/test_regressions.py</code> and a new front-end test). With those changes the backend suite has <strong>38 tests, all passing</strong>, and the front end has <strong>one</strong> test (<code>npm test</code>), which also passes. The changes appear to address the items listed below; this was established by reading the changes and running the tests, and the original probes were <strong>not</strong> re-run against the changed code. Where this report says a finding was "not fixed", it refers to the evaluated commit.</p>
+<p><em>Appear addressed in the working tree:</em> <strong>D-1</strong> (the backend now reads <code>CORS_ORIGINS</code>, so the README instruction takes effect), <strong>U-11</strong> in part (one front-end test now exists, for the alert socket helper), and the health page's connection card. <em>Still open as far as the changes show:</em> U-1 and U-2 (the 401 handler is unchanged, so the failed-login problem remains), U-3 to U-10, D-2 to D-4, and the low coverage of user management and system routes (coverage was not re-measured).</p>
+<h2>6.2 Testing Strategy</h2>
+<table>
+<thead>
+<tr>
+<th>Level</th>
+<th>Technique</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Build</td>
+<td><code>vite build</code></td>
+<td>The front end compiles</td>
+</tr>
+<tr>
+<td>Automated tests</td>
+<td>pytest (31 backend, 8 node)</td>
+<td>API behaviour and pure logic</td>
+</tr>
+<tr>
+<td>Coverage</td>
+<td>Standard-library line tracing across all threads</td>
+<td>The backend package</td>
+</tr>
+<tr>
+<td>Browser check</td>
+<td>Headless Chrome over the DevTools Protocol against the running app</td>
+<td>Failed login behaviour, label association</td>
+</tr>
+<tr>
+<td>Analytics probes</td>
+<td>Temporary tests with edge-case data</td>
+<td>The analytics endpoints</td>
+</tr>
+<tr>
+<td>Code review</td>
+<td>Reading pages and the README</td>
+<td>Error handling, keys, search, documentation</td>
+</tr>
+<tr>
+<td>User evaluation</td>
+<td>None</td>
+<td>See §6.5</td>
+</tr>
+</tbody>
+</table>
+<h2>6.3 Test Cases and Results</h2>
+<p><strong>Table 6.1: Test cases for this component</strong></p>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Test case</th>
+<th>Expected</th>
+<th>Observed</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TC-U1</td>
+<td>Production build</td>
+<td>Compiles</td>
+<td>107 modules transformed; <code>index.html</code> 0.43 kB, CSS 13.50 kB (3.53 kB gzipped), JS 263.64 kB (82.49 kB gzipped); built in 2.31 s</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-U2</td>
+<td>Backend suite</td>
+<td>All pass</td>
+<td>31 passed</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-U3</td>
+<td>Node suite</td>
+<td>All pass</td>
+<td>8 passed</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-U4</td>
+<td>Summary averages mixed confidence scales (0.8 and 60.0)</td>
+<td>70.0</td>
+<td>70.0 (existing test)</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-U5</td>
+<td>Detections per node normalises a fraction (0.5)</td>
+<td>50.0</td>
+<td>50.0 (existing test)</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-U6</td>
+<td>Reports per month with reports in months 1, 2 and 4 ago</td>
+<td>Each month present</td>
+<td>Months 1, 2 and 4 present; the empty third month is <strong>omitted</strong></td>
+<td>Pass with finding U-6</td>
+</tr>
+<tr>
+<td>TC-U7</td>
+<td>Recovery time for one found report resolved 6 days after filing</td>
+<td>6 days</td>
+<td><code>avg_days</code> 6.0, fastest 6, slowest 6, recovered 1</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-U8</td>
+<td>Analytics query bounds (<code>months=0</code>, <code>days=3</code>)</td>
+<td>Rejected</td>
+<td>422 for both</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-U9</td>
+<td>Wrong-password login in a real browser</td>
+<td>Error message shown</td>
+<td><strong>Not shown</strong>: page reloaded (§6.4, U-1)</td>
+<td><strong>Fail</strong></td>
+</tr>
+<tr>
+<td>TC-U10</td>
+<td>Labels on the login form associated with inputs</td>
+<td>Associated</td>
+<td>0 of 2 labels had a <code>for</code> attribute</td>
+<td><strong>Fail</strong> (U-3)</td>
+</tr>
+<tr>
+<td>TC-U11</td>
+<td>Automated front-end tests</td>
+<td>Exist</td>
+<td>None exist</td>
+<td><strong>Not present</strong></td>
+</tr>
+</tbody>
+</table>
+<h2>6.4 Results and Findings</h2>
+<h3>6.4.1 Coverage of the backend by the automated tests</h3>
+<p>Measured with a small all-threads line tracer (it counts executable lines run at least once; a run line is not proof its result was checked). The usual tool, coverage.py, could not be installed offline, so these figures are approximate.</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Lines run / executable</th>
+<th>%</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>models.py</code></td>
+<td>61 / 61</td>
+<td>100.0</td>
+</tr>
+<tr>
+<td><code>schemas.py</code></td>
+<td>114 / 114</td>
+<td>100.0</td>
+</tr>
+<tr>
+<td><code>routers/auth.py</code></td>
+<td>42 / 43</td>
+<td>97.7</td>
+</tr>
+<tr>
+<td><code>auth.py</code></td>
+<td>24 / 26</td>
+<td>92.3</td>
+</tr>
+<tr>
+<td><code>middleware.py</code></td>
+<td>23 / 27</td>
+<td>85.2</td>
+</tr>
+<tr>
+<td><code>main.py</code></td>
+<td>31 / 39</td>
+<td>79.5</td>
+</tr>
+<tr>
+<td><code>database.py</code></td>
+<td>12 / 16</td>
+<td>75.0</td>
+</tr>
+<tr>
+<td><code>routers/reports.py</code></td>
+<td>65 / 87</td>
+<td>74.7</td>
+</tr>
+<tr>
+<td><code>routers/analytics.py</code></td>
+<td>50 / 72</td>
+<td>69.4</td>
+</tr>
+<tr>
+<td><code>routers/alerts.py</code></td>
+<td>75 / 110</td>
+<td>68.2</td>
+</tr>
+<tr>
+<td><code>routers/system.py</code></td>
+<td>37 / 117</td>
+<td>31.6</td>
+</tr>
+<tr>
+<td><code>routers/users.py</code></td>
+<td>31 / 115</td>
+<td>27.0</td>
+</tr>
+<tr>
+<td><code>model.py</code>, <code>routers/model.py</code> (unused placeholder)</td>
+<td>0 / 61</td>
+<td>0.0</td>
+</tr>
+<tr>
+<td><strong>Total</strong></td>
+<td><strong>565 / 888</strong></td>
+<td><strong>63.6</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Excluding the two unused placeholder files, coverage is 565 / 827, about 68%. The weakest areas are <strong>user management</strong> (27%: invite, role change, deactivate, delete and profile edits are largely untested) and <strong>system</strong> routes (32%; the real-time member's probes cover part of these but are not part of the suite). There is no coverage figure for the front end because it has no tests.</p>
+<h3>6.4.2 Interface findings</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Finding</th>
+<th>Evidence</th>
+<th>Severity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>U-1</td>
+<td><strong>A failed login never shows its error.</strong> With a wrong password the server returns 401, the response handler clears storage and reassigns the location to <code>/login</code>, and the page reloads before the login page's error message can be read</td>
+<td>Browser check: the login response statuses were <code>[200, 401]</code> (the page load and the failed login), the page's own marker variable was gone after the click (page reloaded), the page text showed only the empty form with no error, and two frame navigations occurred</td>
+<td>High (usability)</td>
+</tr>
+<tr>
+<td>U-2</td>
+<td>Root cause of U-1: <strong>every 401 is treated as an expired session</strong>, including a failed login</td>
+<td>Read from <code>api.js</code></td>
+<td>(same)</td>
+</tr>
+<tr>
+<td>U-3</td>
+<td><strong>Login form labels are not associated with their inputs</strong></td>
+<td>Browser check: 0 of 2 labels have a <code>for</code> attribute. The Register page does associate its labels (read from code)</td>
+<td>Medium (accessibility)</td>
+</tr>
+<tr>
+<td>U-4</td>
+<td><strong>Several data loads have no error handling</strong>: Alerts, Cameras, Police home, and System Health call the API without a failure branch, so a failed request leaves "Loading" or an empty page with no message. (Analytics does handle failure with a Retry button)</td>
+<td>Read from code, not run</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>U-5</td>
+<td><strong>The registry search sends a request on every keystroke</strong> with no delay, and nothing guards against replies arriving out of order</td>
+<td>Read from code</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>U-11</td>
+<td><strong>No automated front-end tests</strong></td>
+<td>No test files exist</td>
+<td>Medium</td>
+</tr>
+</tbody>
+</table>
+<h3>6.4.3 Analytics findings</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Finding</th>
+<th>Evidence</th>
+<th>Severity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>U-6</td>
+<td><strong>Months and days with no data are omitted</strong>, so the "Reports per month" bars skip empty months (June was missing in the probe), which misrepresents the time axis. The bars are also <strong>not proportional</strong>: height is <code>max(20, min(count×10, 170))</code> px, so counts of 1 and 2 look the same and counts of 17 or more look the same</td>
+<td>Probe; arithmetic from the code</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>U-7</td>
+<td><strong>The detections table splits one camera into several rows</strong> when its location text varies ("Cairo Rd" and "Cairo Road" gave two rows), and the page uses the camera id as the React key, which would then repeat</td>
+<td>Probe; key read from code. A duplicate-key warning was not observed in a browser</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>U-8</td>
+<td><strong>A stored confidence of exactly 1.0 is treated as a fraction and displayed as 100%</strong>, though it could mean 1%</td>
+<td>Probe: stored 1.0 displayed as 100.0</td>
+<td>Low. The rule is a heuristic</td>
+</tr>
+<tr>
+<td>U-9</td>
+<td><strong>"False positives" is counted by searching audit text</strong> for the phrase, so any audit row containing it is counted</td>
+<td>Probe: an unrelated audit row containing the phrase raised the count to 1</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>U-10</td>
+<td><strong>Definitions worth stating on screen:</strong> the recovery rate divides found reports by <em>all</em> reports including those not yet worked (the probe gave 20% for 1 found of 5), and average confidence includes alerts later flagged as false</td>
+<td>Probe and code</td>
+<td>Low</td>
+</tr>
+</tbody>
+</table>
+<h3>6.4.4 Documentation findings</h3>
+<p>Checked by searching <code>README.md</code> and reading it against the code:</p>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Finding</th>
+<th>Severity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D-1</td>
+<td>The README tells the reader to set <code>CORS_ORIGINS</code> and, for deployment, to set it to the deployed front end's address. <strong>The backend does not read this setting</strong>, so following the README would leave a deployed front end blocked (backend report, F-9)</td>
+<td>High for deployment</td>
+</tr>
+<tr>
+<td>D-2</td>
+<td>The README never mentions <code>run-all.ps1</code>, <code>create_admin.py</code> (the only way to create the first administrator), the tests, or the phone camera app</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>D-3</td>
+<td>The README's camera example shows a <code>NODE-001</code> camera id and a <code>STOLEN</code>/<code>CLEAR</code> response but not <code>alert_id</code> or the <code>vehicle</code> details the server actually returns</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>D-4</td>
+<td><code>run-all.ps1</code> contains an absolute path to the developer's own Python environment</td>
+<td>Medium (portability)</td>
+</tr>
+</tbody>
+</table>
+<h3>6.4.5 What was not tested</h3>
+<p>Other browsers, mobile screens, keyboard or screen-reader use, page load time, a live alert on a real screen, behaviour with large data sets, and any user task. The other pages were not driven through the browser in this session; the screenshots in Chapter 4 were captured earlier from the running application.</p>
+<h2>6.5 User Evaluation</h2>
+<p>None carried out. No officer, reportee or administrator used the interface for this report, and no survey or interview data exist.</p>
+<h2>6.6 Analysis of Results</h2>
+<ul>
+<li><strong>The build and test suites are healthy</strong>: the front end compiles into a small bundle (82 kB gzipped JavaScript), and all 39 Python tests pass.</li>
+<li><strong>The tests cover the core well and the edges poorly.</strong> Authentication, models and schemas are near fully exercised, while user management and the system routes are mostly not. A change to role changes or account deletion would not be caught.</li>
+<li><strong>The most damaging interface defect is small and invisible to code review of a single file</strong>: the reload comes from the response handler in one file undoing the error message in another. It was found only by running the application. It means a user who mistypes a password gets no feedback at all.</li>
+<li><strong>The analytics are correct on the cases tested but easy to misread.</strong> Recovery time, status counts and confidence normalisation match expectation. The weaknesses are about presentation (skipped empty periods, non-proportional bars), heuristics (the fraction rule) and definitions that are not stated on screen.</li>
+<li><strong>Documentation trails the code.</strong> The README describes a configuration option that no longer does anything and omits the steps a newcomer needs first.</li>
+</ul>
+<h2>6.7 Objective-by-Objective Evaluation</h2>
+<table>
+<thead>
+<tr>
+<th>Objective</th>
+<th>Evidence</th>
+<th>Verdict</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>U1 Role-based portals with guards</td>
+<td>Fourteen guarded routes; build passes; guards read from code</td>
+<td><strong>Achieved</strong>; guards not exercised in the browser in this session</td>
+</tr>
+<tr>
+<td>U2 Reportee flows</td>
+<td>Pages exist; screenshots; API tests cover registration, login and reports</td>
+<td><strong>Largely achieved</strong>; failed-login feedback broken (U-1)</td>
+</tr>
+<tr>
+<td>U3 Police flows</td>
+<td>Pages exist; API tests cover activate and found</td>
+<td><strong>Largely achieved</strong>; loading errors unhandled (U-4)</td>
+</tr>
+<tr>
+<td>U4 Admin flows</td>
+<td>Pages exist; user-management routes only 27% covered</td>
+<td><strong>Achieved in implementation</strong>; weakly tested</td>
+</tr>
+<tr>
+<td>U5 Correct analytics</td>
+<td>Fixed confidence scale; probes on counts and times</td>
+<td><strong>Largely achieved</strong>; presentation and definition issues (U-6 to U-10)</td>
+</tr>
+<tr>
+<td>U6 Automated tests and coverage</td>
+<td>39 tests pass; backend coverage 63.6%</td>
+<td><strong>Achieved</strong> for the backend; <strong>not achieved</strong> for the front end</td>
+</tr>
+<tr>
+<td>U7 Documentation and run script</td>
+<td>README and script exist</td>
+<td><strong>Partly achieved</strong>: errors and omissions (D-1 to D-4)</td>
+</tr>
+<tr>
+<td>U8 Honest evaluation</td>
+<td>One browser check, probes, coverage, findings</td>
+<td><strong>Achieved</strong> for this scope</td>
+</tr>
+</tbody>
+</table>
+<h2>6.8 Individual Results</h2>
+<p>All results here concern the front end, analytics, test evidence and documentation. Results about token handling (backend member), the alert channel and status pages (real-time member), and the detector and camera node (AI/vision member) are in their own reports.</p>
+<h2>6.9 Chapter Summary</h2>
+<p>The application builds and all 39 Python tests pass, with 63.6% approximate line coverage of the backend. A real browser check found that a wrong password gives no error message, and other checks found unhandled load failures, non-proportional and gappy charts, and README instructions that no longer match the code. None has been fixed in this project.</p><h1>Chapter 7: Discussion</h1>
+<h2>7.1 Introduction</h2>
+<p>This chapter interprets the results of Chapter 6, compares them with related practice, states the contributions, and discusses limitations.</p>
+<h2>7.2 Interpretation of Findings</h2>
+<p><strong>Research question 1</strong> (can a single-page application with client-side guards give each role only the interface it needs, while the server stays the authority?). Yes for the structure: fourteen routes, each with an explicit role list that mirrors the server's, and navigation that differs by role. The guards are convenience, not security, and the code does not pretend otherwise; the backend report shows where server-side enforcement itself has gaps.</p>
+<p><strong>Research question 2</strong> (are the analytics correct and unambiguous?). Correct on the cases tested, not unambiguous. Counts, recovery time and the normalised confidence average behaved as expected. But several figures depend on choices a reader cannot see: what the recovery rate divides by, whether false alerts are in the confidence average, whether a stored 1.0 is 1% or 100%, and whether an empty month is shown. Two of these (U-6 and U-8) can produce a picture that looks right and is not.</p>
+<p><strong>Bugs live between files.</strong> The login failure (U-1) is not a mistake in the login page or in the API module taken alone. Each does something reasonable: the page shows the server's message, and the API module logs out on a 401. Together they erase the message. It was found by running the application, not by reading the code. This is the main argument for the missing front-end and browser tests: the interface's faults are interactions, and only interaction tests find them.</p>
+<p><strong>Coverage tells where to look, not how good the tests are.</strong> A 63.6% approximate line coverage with 100% on models and schemas sounds reassuring, but those files mostly run just by loading the application. The informative numbers are the low ones: user management at 27% and system routes at 32%. Those are also routes where the other members' reports found real weaknesses (stale tokens, an open health endpoint), which is consistent with untested code hiding defects.</p>
+<p><strong>Documentation is a second interface.</strong> The README's instruction to set <code>CORS_ORIGINS</code> is worse than no instruction, because it sends a deployer to a setting that does nothing and gives no sign of failure until the front end is blocked in the browser.</p>
+<h2>7.3 Comparison with Existing Work</h2>
+<p>No numeric comparison was made. Against the component-library route in Chapter 2, this project has fewer dependencies and a small bundle, and pays for it in hand-written charts that lack the guarantees a charting library gives (proportional bars, empty periods, axes), and in no accessibility support beyond what was hand-coded. Against typical practice for web applications, a front end with no automated tests is common in student work and is the largest gap here.</p>
+<h2>7.4 Contributions of the Project</h2>
+<ul>
+<li><strong>Practical:</strong> three role-based portals in fourteen pages; analytics computed from real records; a single-command start and a written quick-start; a body of 39 passing tests.</li>
+<li><strong>Technical:</strong> a shared confidence-normalisation expression that fixed a real defect and is regression-tested; a small, dependency-light front end (four runtime packages, 82 kB gzipped JavaScript).</li>
+<li><strong>Analytical:</strong> a list of front-end, analytics and documentation defects with evidence, including one confirmed in a real browser, and a measured coverage profile of the backend that shows where testing is thin.</li>
+</ul>
+<h2>7.5 Limitations and Implications</h2>
+<table>
+<thead>
+<tr>
+<th>Limitation</th>
+<th>Implication</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>One scripted browser check only</td>
+<td>Other pages may have defects not found; U-4 and U-5 are from reading, not running</td>
+</tr>
+<tr>
+<td>Approximate coverage from a home-made tracer</td>
+<td>Figures may differ slightly from coverage.py; treat as indicative</td>
+</tr>
+<tr>
+<td>No front-end tests</td>
+<td>Every front-end claim rests on inspection or one session</td>
+</tr>
+<tr>
+<td>No user evaluation</td>
+<td>Usability judgements are the student's own</td>
+</tr>
+<tr>
+<td>Severity ratings are the student's own</td>
+<td>Not a formal scale</td>
+</tr>
+<tr>
+<td>Findings not fixed</td>
+<td>The delivered system still has them</td>
+</tr>
+<tr>
+<td>Screenshots are from an earlier session</td>
+<td>They show the interface as it was then</td>
+</tr>
+</tbody>
+</table>
+<h2>7.6 Chapter Summary</h2>
+<p>The front end and analytics work and are lightweight, and their weaknesses lie in interactions, presentation and documentation, not in the core computations. A running application found what reading did not, which argues for interaction tests and for keeping documentation under test.</p><h1>Chapter 8: Conclusion and Recommendations</h1>
+<h2>8.1 Introduction</h2>
+<p>This chapter summarises the project, states the conclusions the evidence supports, reviews the objectives, and gives recommendations and future work.</p>
+<h2>8.2 Summary of the Project</h2>
+<p>The group built SVDS so that stolen-vehicle reports filed by the public can be matched against plates seen by a camera. This report covered the front end, analytics, testing and documentation: a React single-page application with three role-based portals (fourteen pages), seven analytics endpoints and the page that displays them, a fix for mixed confidence scales, an automated test base of 39 tests, and a README and run script. It was evaluated by a production build, the test suites, an approximate coverage measurement, a scripted browser check and analytics probes.</p>
+<h2>8.3 Conclusions</h2>
+<ol>
+<li>A small hand-written React application can give each role its own portal, with guards that mirror the server's roles, using four runtime packages and about 82 kB of gzipped JavaScript.</li>
+<li>The analytics compute real figures from stored records and are correct on the cases tested, after the confidence-scale defect was fixed and regression-tested.</li>
+<li>The backend test suite passes and exercises about 64% of the backend's lines, unevenly: authentication and models well, user management and system routes poorly.</li>
+<li>The interface has real defects: a wrong password gives no error message (confirmed in a browser), several page loads fail silently, some charts mislead, and the login form's labels are not associated with its fields.</li>
+<li>The documentation contains instructions that no longer match the code, including one that would break a deployment.</li>
+<li>The system is not yet at the standard where it can be handed to users without a fix pass, and it has no automated interface tests to protect such a pass.</li>
+</ol>
+<h2>8.4 Achievement of Objectives</h2>
+<table>
+<thead>
+<tr>
+<th>Objective</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>U1 Role-based portals with guards</td>
+<td>Achieved; guards not browser-tested</td>
+</tr>
+<tr>
+<td>U2 Reportee flows</td>
+<td>Largely achieved; failed-login feedback broken</td>
+</tr>
+<tr>
+<td>U3 Police flows</td>
+<td>Largely achieved; load errors unhandled</td>
+</tr>
+<tr>
+<td>U4 Admin flows</td>
+<td>Achieved in implementation; weakly tested</td>
+</tr>
+<tr>
+<td>U5 Correct analytics</td>
+<td>Largely achieved; presentation and definition issues</td>
+</tr>
+<tr>
+<td>U6 Tests and coverage</td>
+<td>Achieved for the backend; not for the front end</td>
+</tr>
+<tr>
+<td>U7 Documentation and run script</td>
+<td>Partly achieved</td>
+</tr>
+<tr>
+<td>U8 Honest evaluation</td>
+<td>Achieved for this scope</td>
+</tr>
+</tbody>
+</table>
+<p>Research question 1: yes. Research question 2: correct on the cases tested, not unambiguous.</p>
+<h2>8.5 Recommendations</h2>
+<p>In priority order:</p>
+<ol>
+<li><strong>Fix the login feedback:</strong> apply the 401 redirect only when the request was not the login call (or when a token existed), so a wrong password shows its message (U-1, U-2).</li>
+<li><strong>Correct the README:</strong> remove or fix the <code>CORS_ORIGINS</code> instruction (and make the backend read it), add first-administrator creation, the run script, the tests and the phone camera setup, and correct the camera example (D-1 to D-3).</li>
+<li><strong>Handle failures on every data load</strong> with an error message and a Retry, as the Analytics page already does (U-4).</li>
+<li><strong>Fill empty periods and make bars proportional</strong> (start at zero, scale to the maximum), or use a charting library (U-6). Label the definitions of recovery rate and average confidence on screen (U-8, U-10).</li>
+<li><strong>Record false-positive flags in a column</strong> on the alert, and count that instead of searching audit text (U-9). Store confidence on one scale and migrate the old rows so the normalisation heuristic can be removed (U-8).</li>
+<li><strong>Group detections by camera id</strong> (with the latest location), not by camera and location text (U-7).</li>
+<li><strong>Associate every form label with its input</strong> and add labels to the login page (U-3).</li>
+<li><strong>Add tests where coverage is lowest:</strong> user management and system routes on the backend, then component tests for the guards and forms and one browser test of the login failure (U-11).</li>
+<li><strong>Debounce the registry search</strong> and ignore stale responses (U-5).</li>
+<li><strong>Remove the absolute path from <code>run-all.ps1</code></strong> (D-4).</li>
+</ol>
+<h2>8.6 Future Work</h2>
+<ul>
+<li>Add continuous testing (run the suites and the build on each change).</li>
+<li>Add browser tests for each role's main task using a tool such as Playwright.</li>
+<li>Add a proper charting library, with accessible chart descriptions.</li>
+<li>Measure real usability with officers and members of the public.</li>
+<li>Add pagination totals and export of analytics for reporting.</li>
+<li>Support English and local languages.</li>
+</ul><h1>References</h1>
+<ol>
+<li>React. "React Documentation." https://react.dev</li>
+<li>React Router. "React Router Documentation." https://reactrouter.com</li>
+<li>Vite. "Vite Documentation." https://vitejs.dev</li>
+<li>Axios. "Axios Documentation." https://axios-http.com</li>
+<li>MDN Web Docs. "Window.localStorage" and "Web accessibility." Mozilla. https://developer.mozilla.org</li>
+<li>W3C. "Web Content Accessibility Guidelines (WCAG) 2.1." https://www.w3.org/TR/WCAG21/</li>
+<li>OWASP Foundation. "OWASP Top 10" and "Cross Site Scripting Prevention Cheat Sheet." https://owasp.org</li>
+<li>Chrome DevTools Protocol documentation. https://chromedevtools.github.io/devtools-protocol/</li>
+<li>pytest. "pytest Documentation." https://docs.pytest.org</li>
+<li>Coverage.py. "Coverage.py Documentation." https://coverage.readthedocs.io</li>
+<li>SQLAlchemy. "SQLAlchemy Documentation." https://www.sqlalchemy.org</li>
+<li>Sommerville, I. (2011). Software Engineering, 9th ed. Pearson.</li>
+</ol>
+<p><span class="todo">[Add any interviews, Zambia Police Service correspondence or supervisor notes you used, and format all entries to the department's required style.]</span></p><h1>Appendix A: Individual Contribution Statement (Group Projects)</h1>
+<h2>Purpose of this Statement</h2>
+<p>This statement identifies the work for which the student was primarily responsible. It is consistent with the main report. Work by other group members is acknowledged and is not claimed.</p>
+<h2>A.1 Project and Group Information</h2>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Details</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Project Title</td>
+<td>SVDS: A Camera-Based Stolen Vehicle Detection System for the Zambia Police Service (built on the VRRS registry)</td>
+</tr>
+<tr>
+<td>Student Name</td>
+<td>[STUDENT NAME]</td>
+</tr>
+<tr>
+<td>Computer Number</td>
+<td>[COMPUTER NUMBER]</td>
+</tr>
+<tr>
+<td>Supervisor</td>
+<td>[SUPERVISOR NAME]</td>
+</tr>
+<tr>
+<td>Group Size</td>
+<td>4</td>
+</tr>
+<tr>
+<td>Group Members</td>
+<td>1. Moomba Nicholas Katapazi, [COMPUTER NUMBER] (AI/vision)<br/>2. [NAME], [COMPUTER NUMBER] (Backend and security)<br/>3. [NAME], [COMPUTER NUMBER] (Real-time and integration)<br/>4. [STUDENT NAME], [COMPUTER NUMBER] (Frontend, analytics, testing and documentation)</td>
+</tr>
+</tbody>
+</table>
+<h2>A.2 Overall Group Project</h2>
+<p>The group built <strong>SVDS/VRRS</strong>, a system with which the public files stolen-vehicle reports and police officers are alerted automatically when a camera sees a reported vehicle. It has three independently running processes: a FastAPI and PostgreSQL backend, a React frontend with three role-based portals (Reportee, Police, Admin), and a camera node that reads number plates from a phone's video stream using a custom-trained YOLOv8 detector and OCR. The common problem is that stolen-vehicle recovery depends on officers chancing to recognise a plate. The core flow is: the camera node reads a plate, the backend matches it against active reports, and connected police dashboards receive an alert over WebSocket.</p>
+<h2>A.3 Individual Role and Responsibilities</h2>
+<p>The group's work was divided into four roles. The student's role was <strong>Role 4: Frontend, analytics, testing and documentation</strong>.</p>
+<table>
+<thead>
+<tr>
+<th>No.</th>
+<th>Area of Responsibility</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>6</td>
+<td>Frontend (three portals)</td>
+<td>The React web application with role-based routing: Reportee, Police and Admin portals</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Analytics, testing and documentation</td>
+<td>Real computed statistics and charts; the automated tests as evidence; bug fixes; README and run script</td>
+</tr>
+</tbody>
+</table>
+<p>Other roles, for reference: <strong>Role 1</strong> AI/vision; <strong>Role 2</strong> Backend and security; <strong>Role 3</strong> Real-time and integration.</p>
+<h2>A.4 Detailed Individual Contribution</h2>
+<ul>
+<li><strong>Front end:</strong> built the routing and guards, the API module, the shared layouts, the stylesheet and the fourteen pages.</li>
+<li><strong>Analytics:</strong> wrote the seven analytics endpoints and the analytics page, and fixed the mixed confidence-scale defect with two regression tests.</li>
+<li><strong>Testing:</strong> ran and interpreted the 39-test suites, measured backend line coverage, ran a scripted browser check, and ran analytics probes.</li>
+<li><strong>Documentation:</strong> the README and the start-up script; audited the README against the code.</li>
+<li><strong>Evaluation:</strong> recorded the findings U-1 to U-11 and D-1 to D-4 with evidence.</li>
+<li><strong>Report:</strong> this report.</li>
+</ul>
+<h2>A.5 Individual Deliverables</h2>
+<table>
+<thead>
+<tr>
+<th>No.</th>
+<th>Deliverable</th>
+<th>Student's Contribution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>React front end (<code>vrrs-frontend/src</code>, 24 files, 1,786 lines, plus <code>styles.css</code>)</td>
+<td>Designed and implemented</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Analytics endpoints and page (<code>routers/analytics.py</code>, <code>Analytics.jsx</code>)</td>
+<td>Designed and implemented</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Confidence-scale fix and its two regression tests</td>
+<td>Diagnosed, fixed, tested</td>
+</tr>
+<tr>
+<td>4</td>
+<td>README and <code>run-all.ps1</code></td>
+<td>Written (start-up script also described in the real-time member's report)</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Coverage measurement and interface/analytics/documentation evaluation</td>
+<td>Carried out and documented</td>
+</tr>
+</tbody>
+</table>
+<h2>A.6 Contribution to the Main System or Research Output</h2>
+<p>The student produced the part of the system that people use directly, and the statistics and tests that show whether it works. The server rules, tokens and data model were built by the backend member; the alert channel, camera status and health endpoint by the real-time member; the detection model and camera node by the AI/vision member. The alert connection and toast live in the front end's files but were written by the real-time member.</p>
+<h2>A.7 Individual Implementation and Technical Work</h2>
+<p>Modules implemented by the student: <code>App.jsx</code>, <code>main.jsx</code>, <code>AuthContext.jsx</code>, <code>ProtectedRoute.jsx</code>, <code>PortalLayout.jsx</code>, <code>ReporteeLayout.jsx</code>, <code>policeNav.js</code>, <code>services/api.js</code> (except <code>createAlertSocket</code>), the reportee, police and admin pages, <code>styles.css</code>, and <code>routers/analytics.py</code>.</p>
+<h2>A.8 Individual Testing and Evaluation Contribution</h2>
+<p>The student ran the 31-test backend suite and the 8-test node suite, measured coverage, ran the browser check and the analytics probes, and wrote Chapter 6. The two analytics regression tests belong to this component. <strong>The student should state which of the remaining test files they wrote themselves</strong>, because the role split assigned tests to this role but the suites also test other members' code.</p>
+<h2>A.9 Collaboration with Other Group Members</h2>
+<ul>
+<li>The <strong>backend member's</strong> API and token are what every page calls; the login response drives the redirect.</li>
+<li>The <strong>real-time member's</strong> alert connection, toast and status pages are mounted and shown by this front end.</li>
+<li>The <strong>AI/vision member's</strong> node stores confidence as a percentage, which the analytics normalisation assumes.</li>
+</ul>
+<h2>A.10 Contribution Summary</h2>
+<ol>
+<li><strong>Work primarily completed by the student:</strong> the front end, the analytics endpoints and page, the confidence fix and its tests, the README, and the evaluation.</li>
+<li><strong>Work completed jointly with other members:</strong> the run script (with the real-time member); the analytics numbers' consistency with the camera node's confidence scale (with the AI/vision member).</li>
+<li><strong>Work primarily completed by other members and used here:</strong> the server rules and tokens; the alert channel and camera status; the detection model and camera node.</li>
+</ol>
+<h2>A.11 Estimated Contribution</h2>
+<p><em>The percentages below are the student's own estimate and must be completed by the student. They were not derived from any record.</em></p>
+<table>
+<thead>
+<tr>
+<th>Project Activity</th>
+<th>Individual Contribution</th>
+<th>Collaborative Contribution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Problem Analysis</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+<tr>
+<td>Literature Review</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+<tr>
+<td>Requirements Analysis</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+<tr>
+<td>System/Research Design</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+<tr>
+<td>Implementation / Development</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+<tr>
+<td>Testing and Evaluation</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+<tr>
+<td>Documentation</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+<tr>
+<td>Other</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+</tbody>
+</table>
+<h2>A.12 Statement of Authorship and Contribution</h2>
+<p>I confirm that the contribution described in this statement accurately represents the work that I personally undertook as part of the group project. I have identified collaborative work and have not knowingly claimed the work of another group member as my own.</p>
+<p><strong>Student Name:</strong> <strong><em>_</em></strong><strong><em>_</em></strong><strong><em>_</em></strong><em>
+<strong>Computer Number:</strong> <strong><em>_</em></strong><strong><em>_</em></strong><strong><em>_</em></strong></em>
+<strong>Signature:</strong> <strong><em>_</em></strong><strong><em>_</em></strong><strong><em>_</em></strong><em>
+<strong>Date:</strong> <strong><em>_</em></strong><strong><em>_</em></strong><strong><em>_</em></strong></em></p>
+<h2>A.13 Supervisor Verification</h2>
+<p>I confirm that, to the best of my knowledge, the contribution described above is consistent with the student's participation in the group project.</p>
+<p><strong>Supervisor Name:</strong> <strong><em>_</em></strong><strong><em>_</em></strong><strong><em>_</em></strong><em>
+<strong>Signature:</strong> <strong><em>_</em></strong><strong><em>_</em></strong><strong><em>_</em></strong></em>
+<strong>Date:</strong> <strong><em>_</em></strong><strong><em>_</em></strong><strong><em>_</em></strong>_</p><h1>Appendix B: User Manual / Installation Guide</h1>
+<p>This guide covers the front end and how to use each portal. Backend and camera-node set-up are in the other members' reports.</p>
+<h2>B.1 Requirements</h2>
+<ul>
+<li>Node.js and npm.</li>
+<li>The backend running and reachable (default <code>http://localhost:8000</code>).</li>
+</ul>
+<h2>B.2 Install and run</h2>
+<pre><code class="language-bash">cd vrrs-frontend
+npm install
+cp .env.example .env
+npm run dev
+</code></pre>
+<p>The app runs at <code>http://localhost:5173</code>. <code>.env</code> holds <code>VITE_API_BASE_URL=http://localhost:8000</code> and <code>VITE_WS_URL=ws://localhost:8000</code>. For a production build:</p>
+<pre><code class="language-bash">npm run build      # writes static files to dist/
+</code></pre>
+<p>Serve <code>dist/</code> from any static web host, with the two variables set to the deployed backend before building. Note the deployment caveat in finding D-1: the backend's allowed origins are hard-coded and must be changed in its code.</p>
+<h2>B.3 Using the application</h2>
+<p><strong>Everyone</strong>
+- <strong>Register</strong> (public): first and last name, email, telephone (<code>+260 XX XXXXXXX</code>), national ID (<code>NNNNNN/NN/N</code>) and a password of at least 6 characters. Registration creates a reportee.
+- <strong>Sign in:</strong> you are taken to the portal for your role. <em>Note:</em> if you type a wrong password the page reloads with no message (finding U-1); check your details and try again.</p>
+<p><strong>Reportee</strong>
+- <em>Report vehicle:</em> enter the plate and vehicle details, when and where it was last seen, and a description; submit. The report starts as "under review".
+- <em>My reports:</em> see your reports and their status (under review, missing, found).
+- <em>Profile:</em> edit your details and change your password.</p>
+<p><strong>Police</strong>
+- <em>Vehicle registry:</em> search by plate or owner, filter by status. <strong>Activate</strong> an under-review report so cameras can match it; <strong>mark found</strong> when the vehicle is recovered.
+- <em>Live alerts:</em> review unread alerts; mark read, mark all read, or flag a false positive. A notification appears on any page when a stolen vehicle is detected.
+- <em>Cameras:</em> live feed and node status.
+- <em>Analytics:</em> totals, average recovery time, average detection confidence, false positives, reports per month, status breakdown and detections by location.</p>
+<p><strong>Administrator</strong>
+- <em>Overview</em>, <em>User management</em> (invite police, change role, deactivate or reactivate, delete with confirmation), <em>System health</em>, <em>Audit log</em>.</p>
+<h2>B.4 Reading the analytics</h2>
+<table>
+<thead>
+<tr>
+<th>Figure</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Recovery rate</td>
+<td>Found reports as a percentage of <strong>all</strong> reports, including ones not yet worked</td>
+</tr>
+<tr>
+<td>Avg. recovery time</td>
+<td>Mean days between filing and being marked found</td>
+</tr>
+<tr>
+<td>Avg. detection confidence</td>
+<td>Mean confidence of <strong>all</strong> alerts, including ones later flagged as false</td>
+</tr>
+<tr>
+<td>False positives</td>
+<td>Alerts flagged as false, counted from the audit log</td>
+</tr>
+<tr>
+<td>Reports per month</td>
+<td>Months with no reports are not shown; bar heights are capped, so compare the printed counts, not the bar heights</td>
+</tr>
+</tbody>
+</table>
+<h2>B.5 Troubleshooting</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Likely cause</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Blank or "Loading" page</td>
+<td>The backend is not running or unreachable</td>
+<td>Start the backend; reload</td>
+</tr>
+<tr>
+<td>Signed straight back out</td>
+<td>Token expired (24 hours) or backend restarted with a different key</td>
+<td>Sign in again</td>
+</tr>
+<tr>
+<td>No alert notifications</td>
+<td>The alert connection dropped (see the real-time report)</td>
+<td>Reload the page</td>
+</tr>
+<tr>
+<td>Browser blocks API calls (CORS)</td>
+<td>The front end's address is not in the backend's hard-coded list</td>
+<td>Add it in the backend's <code>main.py</code></td>
+</tr>
+</tbody>
+</table>
+<h2>B.6 Run the checks</h2>
+<pre><code class="language-bash">cd vrrs-frontend &amp;&amp; npm run build          # compile check
+cd ../vrrs-backend &amp;&amp; python -m pytest tests/ -v
+cd ../vrrs-node &amp;&amp; python -m pytest tests/ -v
+</code></pre>
+<hr />
+<h1>Appendix C: Additional System Designs / Diagrams</h1>
+<h2>C.1 Further screens (captured earlier from the running application)</h2>
+<p><img alt="Figure C.1: Profile" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/profile.png" /></p>
+<p><img alt="Figure C.2: Cameras" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/cameras.png" /></p>
+<p><img alt="Figure C.3: System health" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/system-health.png" /></p>
+<p><img alt="Figure C.4: Interactive API documentation" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/swagger-docs.png" /></p>
+<h2>C.2 Iterative development cycle</h2>
+<p><img alt="Figure C.5: iterative development cycle" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/03-requirements-engineering-1.png" /></p>
+<h2>C.3 Authentication sequence</h2>
+<p><img alt="Figure C.6: authentication sequence (backend member)" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/04-system-design-3.png" /></p>
+<hr />
+<h1>Appendix D: Additional Test Cases and Results</h1>
+<h2>D.1 Production build output</h2>
+<pre><code>vite v5.4.21 building for production...
+107 modules transformed.
+dist/index.html                 0.43 kB | gzip:  0.30 kB
+dist/assets/index-*.css        13.50 kB | gzip:  3.53 kB
+dist/assets/index-*.js        263.64 kB | gzip: 82.49 kB
+built in 2.31s
+</code></pre>
+<h2>D.2 Browser check (raw output)</h2>
+<pre><code>marker after wrong-password click -&gt; None   (None means the page reloaded)
+visible error text -&gt; 'SVDS - Sign in\nEmail\n\nPassword\n\nSign in\n\nNo account? Register'
+frame navigations after initial load: 2
+login response statuses: [200, 401]
+labels with for attr: 0 of 2
+</code></pre>
+<p>The script started headless Chrome, opened the login page, typed a made-up email and password, clicked Sign in, and read the page. It wrote nothing to the database (the server rejected the login). The backend and dev server were started for the check and stopped afterwards.</p>
+<h2>D.3 Analytics probes (raw output)</h2>
+<pre><code>PROBE reports-per-month (6): [('May',1), ('Jul',1), ('Aug',1), ('Sep',2)]
+PROBE summary reports: {'total':5,'missing':3,'found':1,'under_review':1,'new_this_week':1,'recovery_rate':20.0}
+PROBE recovery-time: {'avg_days':6.0,'fastest_days':6,'slowest_days':6,'total_recovered':1}
+PROBE detections-per-node rows for one camera: [('CAM-X','Cairo Rd',1), ('CAM-X','Cairo Road',1)]
+PROBE confidence stored 1.0 -&gt; avg shown: 100.0
+PROBE alerts-over-time (30d) points: 2 for 2 alert-days
+PROBE false_positives after unrelated audit row containing the phrase: 1
+PROBE months=0 -&gt; 422 | days=3 -&gt; 422
+</code></pre>
+<h2>D.4 Coverage (raw output)</h2>
+<pre><code>COV auth.py 24/26 = 92.3%        COV routers\alerts.py    75/110 = 68.2%
+COV database.py 12/16 = 75.0%    COV routers\analytics.py 50/72  = 69.4%
+COV main.py 31/39 = 79.5%        COV routers\auth.py      42/43  = 97.7%
+COV middleware.py 23/27 = 85.2%  COV routers\model.py      0/38  =  0.0%
+COV model.py 0/23 = 0.0%         COV routers\reports.py   65/87  = 74.7%
+COV models.py 61/61 = 100.0%     COV routers\system.py    37/117 = 31.6%
+COV schemas.py 114/114 = 100.0%  COV routers\users.py     31/115 = 27.0%
+COV TOTAL 565/888 = 63.6%   (pytest exit 0; 31 passed)
+</code></pre>
+<hr />
+<h1>Appendix E: Data Collection Instruments</h1>
+<p>Not applicable. No questionnaires, interviews or surveys were used.</p>
+<hr />
+<h1>Appendix F: Additional Code / Configuration</h1>
+<h2>F.1 The response handler behind finding U-1 (<code>services/api.js</code>)</h2>
+<pre><code class="language-js">api.interceptors.response.use(
+    (response) =&gt; response,
+    (error) =&gt; {
+        if (error.response?.status === 401) {
+            localStorage.clear();
+            window.location.href = &quot;/login&quot;;
+        }
+        return Promise.reject(error);
+    }
+);
+</code></pre>
+<p>A wrong password also returns 401, so the page is reloaded before the login form can display the server's message. A fix is to skip the redirect when the request was to <code>/auth/login</code>.</p>
+<h2>F.2 Bar height (<code>pages/police/Analytics.jsx</code>)</h2>
+<pre><code class="language-jsx">style={{ height: `${Math.max(20, Math.min((m.count || 1) * 10, 170))}px` }}
+</code></pre>
+<p>Counts of 1 and 2 both give 20 px; counts of 17 or more all give 170 px (finding U-6).</p>
+<h2>F.3 Confidence normalisation (<code>routers/analytics.py</code>)</h2>
+<pre><code class="language-python">NORMALIZED_CONFIDENCE = case(
+    (Alert.confidence_score &lt;= 1, Alert.confidence_score * 100),
+    else_=Alert.confidence_score,
+)
+</code></pre>
+<h2>F.4 Front-end environment template (<code>vrrs-frontend/.env.example</code>)</h2>
+<pre><code>VITE_API_BASE_URL=http://localhost:8000
+VITE_WS_URL=ws://localhost:8000
+</code></pre>
+<hr />
+<h1>Appendix G: Other Supporting Material</h1>
+<h2>G.1 Group role split</h2>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Work areas</th>
+<th>Focus</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1. AI/vision</td>
+<td>Detection model; camera node</td>
+<td>YOLOv8n detector, OCR pipeline</td>
+</tr>
+<tr>
+<td>2. Backend and security</td>
+<td>Backend API and database; security and access control</td>
+<td>FastAPI, PostgreSQL, JWT, roles</td>
+</tr>
+<tr>
+<td>3. Real-time and integration</td>
+<td>Real-time alerts and monitoring; phone-to-server wiring</td>
+<td>WebSocket, camera status, feed proxy, health</td>
+</tr>
+<tr>
+<td>4. Frontend</td>
+<td>Frontend portals; analytics, testing and documentation</td>
+<td><strong>This report</strong></td>
+</tr>
+</tbody>
+</table>
+<h2>G.2 Findings summary</h2>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Finding</th>
+<th>Severity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>U-1</td>
+<td>Failed login shows no error (page reloads)</td>
+<td>High</td>
+</tr>
+<tr>
+<td>U-2</td>
+<td>Every 401 treated as an expired session (cause of U-1)</td>
+<td>High</td>
+</tr>
+<tr>
+<td>U-3</td>
+<td>Login labels not associated with inputs</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>U-4</td>
+<td>Several data loads have no error handling</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>U-5</td>
+<td>Registry search on every keystroke, no stale-reply guard</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>U-6</td>
+<td>Empty periods omitted; bars not proportional</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>U-7</td>
+<td>One camera split into several rows</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>U-8</td>
+<td>Stored 1.0 shown as 100%</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>U-9</td>
+<td>False positives counted by searching audit text</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>U-10</td>
+<td>Recovery rate and confidence definitions not stated on screen</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>U-11</td>
+<td>No automated front-end tests</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>D-1</td>
+<td>README <code>CORS_ORIGINS</code> instruction has no effect</td>
+<td>High (deployment)</td>
+</tr>
+<tr>
+<td>D-2</td>
+<td>README omits run script, first admin, tests, phone app</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>D-3</td>
+<td>README camera example incomplete</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>D-4</td>
+<td>Absolute developer path in <code>run-all.ps1</code></td>
+<td>Medium</td>
+</tr>
+</tbody>
+</table>
+</body></html>

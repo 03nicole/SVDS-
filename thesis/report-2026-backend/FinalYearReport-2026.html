@@ -1,0 +1,1971 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>Final Year Project Report 2026</title>
+<style>
+  @page { size: A4; margin: 2.5cm; }
+  body { font-family: 'Times New Roman', serif; font-size: 12pt; line-height: 1.5; color: #000; max-width: 210mm; margin: 0 auto; }
+  h1 { font-size: 20pt; text-align: center; page-break-before: always; margin-top: 0; }
+  h2 { font-size: 15pt; margin-top: 1.4em; }
+  h3 { font-size: 13pt; margin-top: 1.1em; }
+  p, li { text-align: justify; }
+  code { font-family: Consolas, 'Courier New', monospace; font-size: 10pt; }
+  pre { background: #f5f5f5; border: 1px solid #ddd; padding: 8px; font-size: 9pt; white-space: pre-wrap; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 10.5pt; }
+  th, td { border-top: 1px solid #444; border-bottom: 1px solid #444; padding: 4px 8px; text-align: left; vertical-align: top; }
+  th { background: #efefef; }
+  img { max-width: 100%; display: block; margin: 0.8em auto; }
+  .cover { text-align: center; page-break-after: always; }
+  .cover h2, .cover h3 { text-align: center; }
+  .plain-title { font-size: 20pt; font-weight: bold; text-align: center; page-break-before: always; margin: 1em 0; }
+  .sig { margin: 1.4em 0; } .sig span { display: inline-block; border-bottom: 1px solid #000; width: 60%; }
+  .center { text-align: center; }
+  .todo { background: #fff3b0; }
+</style>
+</head><body>
+
+<div class="cover">
+<h3>THE UNIVERSITY OF ZAMBIA</h3>
+<h3>SCHOOL OF NATURAL AND APPLIED SCIENCES</h3>
+<h3>DEPARTMENT OF COMPUTING AND INFORMATICS</h3>
+<br/><br/>
+<h2>FINAL YEAR PROJECT REPORT</h2>
+<h3>ACADEMIC YEAR 2026</h3>
+<br/><br/>
+<h1 style="page-break-before:avoid">SVDS: A Camera-Based Stolen Vehicle Detection System for the Zambia Police Service &mdash; The Backend, Database and Security Component</h1>
+<br/>
+<p class="center">A Final Year Project Report Submitted to the<br/>Department of Computing and Informatics<br/>in partial fulfilment of the requirements for the award of</p>
+<p class="center"><b>[DEGREE PROGRAMME &mdash; confirm]</b></p>
+<br/><br/>
+<p class="center"><b>Student Name:</b> [STUDENT NAME &mdash; Role 2: Backend and Security]<br/>
+<b>Computer Number:</b> [COMPUTER NUMBER]<br/>
+<b>Supervisor:</b> [SUPERVISOR NAME]<br/>
+<b>Date of Submission:</b> [DATE OF SUBMISSION]</p>
+</div>
+
+<div class="plain-title">DECLARATION</div>
+<p>I declare that this final year project report is my own work and has been prepared in accordance with the academic requirements of the University of Zambia. All sources of information, ideas, data, software, images, and other material that are not my own have been appropriately acknowledged and referenced.</p>
+<p>Where this project was undertaken as part of a group, I have clearly identified my individual contributions and have not presented the work of other group members as my own.</p>
+<p class="sig"><b>Student Name:</b> [STUDENT NAME &mdash; Role 2: Backend and Security]</p>
+<p class="sig"><b>Computer Number:</b> <span>&nbsp;</span></p><p class="sig"><b>Signature:</b> <span>&nbsp;</span></p><p class="sig"><b>Date:</b> <span>&nbsp;</span></p>
+
+<div class="plain-title">APPROVAL</div>
+<p>This final year project report has been submitted for examination with the approval of the project supervisor.</p>
+<p class="sig"><b>Supervisor Name:</b> <span>&nbsp;</span></p><p class="sig"><b>Signature:</b> <span>&nbsp;</span></p><p class="sig"><b>Date:</b> <span>&nbsp;</span></p><p class="sig"><b>Departmental/Examiner Approval (if applicable):</b> <span>&nbsp;</span></p>
+<div class="plain-title">ABSTRACT</div>
+
+<p>Stolen-vehicle recovery in Zambia depends largely on police officers chancing to recognise a plate number from a paper report or radio bulletin. This project, carried out by a group of four students, built SVDS, a Stolen Vehicle Detection System on top of the VRRS vehicle registry. The public files stolen-vehicle reports through a web application, and a camera node reads plates from a phone's video stream and checks them against active reports, so connected police officers are alerted in real time.</p>
+<p>This individual report covers the backend and security component: the FastAPI service, its PostgreSQL data model, and its authentication and access control. The backend has four tables (users, reports, alerts, audit log), stores passwords as bcrypt hashes, issues signed JSON Web Tokens that carry the user's role, and enforces three roles (reportee, police, admin) on the server with reusable dependencies plus per-report ownership rules. It implements the report lifecycle (under review, missing, found), an audit trail, and the endpoint the camera node calls to ask whether a plate is stolen, which matches plates regardless of case and spacing.</p>
+<p>The backend was verified with 31 automated tests, all of which pass, run against an in-memory SQLite database. Targeted probe tests then confirmed weaknesses that the tests did not cover: tokens remain valid after a user is deactivated, demoted or logged out; report status accepts arbitrary values; the public plate-check endpoint can be called repeatedly to create false alerts; and failed logins are not limited. These findings are documented with recommended fixes and have not been fixed in this project. The report concludes that the backend meets its access-control goals for tokens as issued but should not be used with real police data until the recommendations are applied.</p>
+<p><strong>Keywords:</strong> role-based access control; JSON Web Token; FastAPI; PostgreSQL; API security</p>
+<p><strong>Note on the version of the code evaluated.</strong> All findings, test counts, coverage figures and line counts in this report were obtained against the code as committed (commit <code>a349fc6</code>). After that evaluation, uncommitted changes appeared in the working tree (<code>middleware.py</code>, <code>alerts.py</code>, <code>system.py</code>, <code>main.py</code>, <code>api.js</code>, <code>SystemHealth.jsx</code>, <code>conftest.py</code>, a new <code>tests/test_regressions.py</code> and a new front-end test). With those changes the backend suite has <strong>38 tests, all passing</strong>, and the front end has <strong>one</strong> test (<code>npm test</code>), which also passes. The changes appear to address the items listed below; this was established by reading the changes and running the tests, and the original probes were <strong>not</strong> re-run against the changed code. Where this report says a finding was "not fixed", it refers to the evaluated commit.</p>
+<p><em>Appear addressed in the working tree:</em> <strong>F-1</strong> and <strong>F-2</strong> (every request now re-reads the user from the database, so a deactivated or demoted user's old token is rejected, and the role comes from the database, not the token) and <strong>F-9</strong> (<code>CORS_ORIGINS</code> is now read). <em>Still open as far as the changes show:</em> F-3, F-4, F-5, F-6, F-7 (logout does not end a session by itself), F-8 and F-10.</p>
+<div class="plain-title">ACKNOWLEDGEMENTS</div>
+
+<p><span class="todo">[Write acknowledgements here: supervisor, group members (AI/vision, real-time and integration, frontend), family, and anyone who helped collect plate images. The author must write this; it is personal.]</span></p>
+<div class="plain-title">CONTENTS</div>
+
+<p><strong>Preliminary pages:</strong> Declaration · Approval · Abstract · Acknowledgements · List of Abbreviations and Acronyms · Note on Group Projects</p>
+<p><strong>1 Introduction</strong> — 1.1 Background and Context · 1.2 Problem Statement · 1.3 Project Aim · 1.4 Project Objectives · 1.5 Research Questions · 1.6 Scope of the Project (In Scope, Out of Scope) · 1.7 Significance · 1.8 Limitations · 1.9 Organisation of the Report</p>
+<p><strong>2 Literature Review</strong> — 2.1 Introduction · 2.2 Key Concepts and Theories · 2.3 Existing Systems / Related Work · 2.4 Comparative Analysis · 2.5 Research / Knowledge Gap · 2.6 Conceptual Framework · 2.7 Chapter Summary</p>
+<p><strong>3 Methodology</strong> — 3.1 Introduction · 3.2 Research / Development Approach · 3.3 Requirements / Data Collection · 3.4 System Architecture / Research Workflow · 3.5 Tools and Technologies · 3.6 Ethical and Legal Considerations · 3.7 Evaluation Method · 3.8 Chapter Summary</p>
+<p><strong>4 System Analysis and Design</strong> — 4.1 Introduction · 4.2 Stakeholder and User Analysis · 4.3 Functional Requirements · 4.4 Non-Functional Requirements · 4.5 Use Cases / User Stories · 4.6 System / Solution Architecture · 4.7 Database / Data Design · 4.8 Interface / Interaction Design · 4.9 Algorithms / Models / Technical Design · 4.10 Chapter Summary</p>
+<p><strong>5 Implementation / Development</strong> — 5.1 Introduction · 5.2 Development Environment · 5.3 System Components / Modules · 5.4 Key Implementation Details · 5.5 Integration · 5.6 Challenges and Solutions · 5.7 Individual Contribution · 5.8 Chapter Summary</p>
+<p><strong>6 Testing, Results and Evaluation</strong> — 6.1 Introduction · 6.2 Testing Strategy · 6.3 Test Cases and Results · 6.4 Experimental / Performance Results · 6.5 User Evaluation · 6.6 Analysis of Results · 6.7 Objective-by-Objective Evaluation · 6.8 Individual Results · 6.9 Chapter Summary</p>
+<p><strong>7 Discussion</strong> — 7.1 Introduction · 7.2 Interpretation of Findings · 7.3 Comparison with Existing Work · 7.4 Contributions of the Project · 7.5 Limitations and Implications · 7.6 Chapter Summary</p>
+<p><strong>8 Conclusion and Recommendations</strong> — 8.1 Introduction · 8.2 Summary of the Project · 8.3 Conclusions · 8.4 Achievement of Objectives · 8.5 Recommendations · 8.6 Future Work</p>
+<p><strong>References</strong></p>
+<p><strong>Appendices</strong> — A Individual Contribution Statement · B User Manual / Installation Guide · C Additional System Designs / Diagrams · D Additional Test Cases and Results · E Data Collection Instruments · F Additional Code / Configuration · G Other Supporting Material</p>
+<p><span class="todo">[Page numbers are not shown here. In Word, apply heading styles and use References → Table of Contents to generate a numbered contents page, and a List of Figures and List of Tables the same way.]</span></p>
+<div class="plain-title">LIST OF ABBREVIATIONS AND ACRONYMS</div>
+
+<table>
+<thead>
+<tr>
+<th>Abbreviation</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ALPR</td>
+<td>Automatic Licence Plate Recognition</td>
+</tr>
+<tr>
+<td>API</td>
+<td>Application Programming Interface</td>
+</tr>
+<tr>
+<td>CUDA</td>
+<td>Compute Unified Device Architecture (NVIDIA GPU computing platform)</td>
+</tr>
+<tr>
+<td>CORS</td>
+<td>Cross-Origin Resource Sharing</td>
+</tr>
+<tr>
+<td>ORM</td>
+<td>Object-Relational Mapper</td>
+</tr>
+<tr>
+<td>OWASP</td>
+<td>Open Worldwide Application Security Project</td>
+</tr>
+<tr>
+<td>RBAC</td>
+<td>Role-Based Access Control</td>
+</tr>
+<tr>
+<td>REST</td>
+<td>Representational State Transfer</td>
+</tr>
+<tr>
+<td>DBMS</td>
+<td>Database Management System</td>
+</tr>
+<tr>
+<td>GPU</td>
+<td>Graphics Processing Unit</td>
+</tr>
+<tr>
+<td>HTTP</td>
+<td>Hypertext Transfer Protocol</td>
+</tr>
+<tr>
+<td>IoU</td>
+<td>Intersection over Union</td>
+</tr>
+<tr>
+<td>JWT</td>
+<td>JSON Web Token</td>
+</tr>
+<tr>
+<td>mAP</td>
+<td>mean Average Precision</td>
+</tr>
+<tr>
+<td>MJPEG</td>
+<td>Motion JPEG (video stream format)</td>
+</tr>
+<tr>
+<td>ML</td>
+<td>Machine Learning</td>
+</tr>
+<tr>
+<td>OCR</td>
+<td>Optical Character Recognition</td>
+</tr>
+<tr>
+<td>SVDS</td>
+<td>Stolen Vehicle Detection System</td>
+</tr>
+<tr>
+<td>UI</td>
+<td>User Interface</td>
+</tr>
+<tr>
+<td>VRRS</td>
+<td>Vehicle Registry and Reporting System</td>
+</tr>
+<tr>
+<td>YOLO</td>
+<td>You Only Look Once (object detector family)</td>
+</tr>
+</tbody>
+</table>
+<div class="plain-title">NOTE ON GROUP PROJECTS</div>
+
+<p>Students who worked on a project as a group are strongly encouraged to prepare their own individual final reports rather than submitting identical reports. The project, system, dataset, or overall research problem may be shared, but each student's report should clearly demonstrate that student's own understanding, responsibilities, work, results, and contribution to the project.</p>
+<p>In particular, group-project students should:</p>
+<ul>
+<li>state the overall group project and explain how the individual work fits within it;</li>
+<li>clearly identify their own responsibilities and deliverables;</li>
+<li>focus detailed analysis, design, implementation, experiments, testing, and/or evaluation on their own contribution;</li>
+<li>acknowledge the work completed by other group members where it is discussed;</li>
+<li>include an <em>Individual Contribution Statement</em> in the appendices; and</li>
+<li>not claim another group member's work, results, code, data collection, or design decisions as their own.</li>
+</ul><h1>Chapter 1: Introduction</h1>
+<h2>1.1 Background and Context</h2>
+<p>Vehicle theft is a persistent problem for law enforcement in Zambia. Recovering a stolen vehicle depends heavily on chance: an officer at a checkpoint or on patrol happens to recognise a plate number from a paper report or a radio bulletin. Vehicle records, incident reports and eyewitness descriptions are typically kept on paper or in disconnected station-level spreadsheets, so a report filed at one police station is invisible to an officer elsewhere.</p>
+<p>This report describes <strong>SVDS</strong>, the Stolen Vehicle Detection System, built by a group of four students on top of the <strong>VRRS</strong> (Vehicle Registry and Reporting System). Members of the public file stolen-vehicle reports through a web application. A camera node reads number plates from a phone's video stream and asks the server whether each plate belongs to an active report. Police officers are alerted when it does.</p>
+<p>Every part of that flow depends on one server-side component: the <strong>backend</strong>. It stores the reports and accounts, decides who may see and change what, and answers the camera's question "is this plate stolen?". This report is the individual report of the student responsible for that component and for <strong>security and access control</strong>.</p>
+<h2>1.2 Problem Statement</h2>
+<p>Stolen-vehicle information in Zambia is fragmented and slow to reach the people who could act on it. A system that lets the public report a theft and lets cameras check plates against those reports needs a central service that:</p>
+<ol>
+<li>keeps one authoritative record of reports, users and detections;</li>
+<li>is trustworthy about <em>who</em> is asking, so that public users, officers and administrators each see only what their role permits; and</li>
+<li>keeps a record of who did what, so that decisions about a report can be traced.</li>
+</ol>
+<p>Without these, a reporting system either leaks sensitive vehicle and personal data, or lets the wrong person activate, alter or delete a report. The specific problem addressed here is <strong>designing and building a database-backed API that stores reports securely, enforces role-based access on the server, and answers plate-match queries from the camera node</strong>.</p>
+<h2>1.3 Project Aim</h2>
+<p><strong>Group aim.</strong> To design, implement and evaluate SVDS: a vehicle registry and reporting web application integrated with a real-time, camera-based licence plate detection pipeline, for the Zambia Police Service and the public it serves.</p>
+<p><strong>Individual aim (Backend and security).</strong> To build and evaluate the backend API, its PostgreSQL data model, and its authentication and access-control layer.</p>
+<h2>1.4 Project Objectives</h2>
+<h3>Group objectives</h3>
+<ol>
+<li>Role-based accounts (Reportee, Police, Admin) with scoped access.</li>
+<li>Public filing and tracking of stolen-vehicle reports (<code>under_review</code> → <code>missing</code> → <code>found</code>).</li>
+<li>A live view of alerts, the registry and analytics for police.</li>
+<li>Administrator control of accounts, system health and the audit trail.</li>
+<li>Detection and reading of plates from a live camera feed, matched against active reports.</li>
+<li>Real-time alerts to connected police clients.</li>
+</ol>
+<h3>Individual objectives (Backend and security)</h3>
+<table>
+<thead>
+<tr>
+<th>No.</th>
+<th>Objective</th>
+<th>Measure of success</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>B1</td>
+<td>Design and implement the relational data model (users, reports, alerts, audit log)</td>
+<td>Four tables with keys and constraints created from the ORM models</td>
+</tr>
+<tr>
+<td>B2</td>
+<td>Implement registration, login and password storage without plaintext passwords</td>
+<td>Passwords stored as bcrypt hashes; login issues a signed, expiring JWT</td>
+</tr>
+<tr>
+<td>B3</td>
+<td>Enforce three-role access control on the server for every route</td>
+<td>A test matrix shows each role reaching only its permitted routes</td>
+</tr>
+<tr>
+<td>B4</td>
+<td>Implement the report lifecycle with validation and ownership rules</td>
+<td>Reportees see only their own reports; only police can activate or resolve; only admins can delete</td>
+</tr>
+<tr>
+<td>B5</td>
+<td>Implement the plate-match endpoint used by the camera node</td>
+<td>Tolerates case and spacing differences; matches only active reports; records an alert</td>
+</tr>
+<tr>
+<td>B6</td>
+<td>Write an audit record for state-changing actions</td>
+<td>Each such action produces a row naming the actor and target</td>
+</tr>
+<tr>
+<td>B7</td>
+<td>Verify the above with automated tests and a security review</td>
+<td>All backend tests pass; weaknesses found are recorded honestly</td>
+</tr>
+</tbody>
+</table>
+<h2>1.5 Research Questions</h2>
+<ol>
+<li>Can role-based access control be enforced consistently on the server, using a signed token that carries the user's role, so that no route depends on the front end to hide it?</li>
+<li>What security weaknesses remain in such a design once it works, and which of them can be demonstrated rather than merely suspected?</li>
+</ol>
+<h2>1.6 Scope of the Project</h2>
+<h3>1.6.1 In Scope</h3>
+<ul>
+<li><strong>This report:</strong> the FastAPI application structure, the SQLAlchemy models and PostgreSQL schema, the schemas that validate input and output, registration and login, password hashing, JWT creation and checking, the role-checking dependencies, user management, the report lifecycle endpoints, the <code>check-plate</code> endpoint, audit logging, and the tests of these.</li>
+<li><strong>Group:</strong> the whole system, including the components in Chapter 5's table that belong to other members.</li>
+</ul>
+<h3>1.6.2 Out of Scope</h3>
+<ul>
+<li>The detection model and camera node (AI/vision member).</li>
+<li>The WebSocket broadcast, camera status and live-feed proxy, and system health (real-time and integration member). The <code>check-plate</code> endpoint <em>calls</em> the broadcast but does not implement it.</li>
+<li>The React portals and analytics charts (frontend member).</li>
+<li>Production hosting, TLS termination, backups and database migrations.</li>
+</ul>
+<h2>1.7 Significance of the Project</h2>
+<p>The backend is what makes SVDS safe to use. The Zambia Police Service gains a single record of reports that officers in any station can search, with each action traceable to an account. The public gain a way to file a report and follow its status without being able to see anyone else's. The project also documents, honestly, where a small role-based API of this kind is weak, which is useful to anyone extending it.</p>
+<h2>1.8 Limitations</h2>
+<ul>
+<li>Security testing was limited to automated tests and targeted probes run against an in-memory test database. No penetration test, load test or external review was carried out.</li>
+<li>The tests run on SQLite, not on the PostgreSQL database used in practice. One PostgreSQL-specific function is emulated in the test set-up (§6.2).</li>
+<li>No formal stakeholder interviews are recorded, so requirements are the group's own analysis.</li>
+<li>Several weaknesses found (§6.4) were <strong>documented, not fixed</strong>, within the project's time.</li>
+</ul>
+<h2>1.9 Organisation of the Report</h2>
+<p>Chapter 2 reviews the concepts (REST, JWT, bcrypt, RBAC) and related practice. Chapter 3 describes the method, tools, ethics and evaluation. Chapter 4 gives the analysis and design of the backend. Chapter 5 describes the implementation and the student's contribution. Chapter 6 presents the tests, the security probes and an objective-by-objective evaluation. Chapter 7 discusses the findings. Chapter 8 concludes. The appendices contain the Individual Contribution Statement, installation guide, extra diagrams, test output and code.</p><h1>Chapter 2: Literature Review</h1>
+<h2>2.1 Introduction</h2>
+<p>This chapter reviews the concepts and technologies behind the SVDS backend: REST APIs, token-based authentication, password hashing, role-based access control, relational data modelling and audit logging. It then looks at existing systems and identifies the gap. Section numbers follow the template.</p>
+<h2>2.2 Key Concepts and Theories</h2>
+<h3>2.2.1 REST APIs and FastAPI</h3>
+<p>A REST API exposes resources (here: reports, users, alerts) at URLs and uses HTTP methods (<code>GET</code>, <code>POST</code>, <code>PATCH</code>, <code>DELETE</code>) to act on them. <strong>FastAPI</strong> is a Python framework that builds such APIs from type-annotated functions. It validates request bodies with <strong>Pydantic</strong> models and generates interactive documentation (Swagger UI at <code>/docs</code>). Its <strong>dependency injection</strong> mechanism lets a route declare what it needs (a database session, the current user), which is how access control is attached to routes in this project.</p>
+<h3>2.2.2 Relational databases and ORMs</h3>
+<p>A relational database stores data in tables linked by keys, and constraints (uniqueness, foreign keys, <code>ON DELETE CASCADE</code>) keep the data consistent. <strong>PostgreSQL</strong> is an open-source relational database. <strong>SQLAlchemy</strong> is an object-relational mapper (ORM): tables are described as Python classes and queries are written in Python. A weakness of <code>create_all()</code> schema creation, relevant here, is that it creates missing tables but never alters existing ones.</p>
+<h3>2.2.3 Password hashing</h3>
+<p>Passwords must never be stored in plaintext. A password <em>hash function</em> turns a password into a fixed string that cannot practically be reversed. General-purpose hashes are too fast; password hashing needs a deliberately slow, salted algorithm. <strong>bcrypt</strong> is such an algorithm: each hash includes a random salt and a cost factor, so identical passwords give different hashes and brute-force guessing is slow. The <code>passlib</code> library provides a <code>CryptContext</code> wrapper.</p>
+<h3>2.2.4 JSON Web Tokens</h3>
+<p>A <strong>JSON Web Token (JWT, RFC 7519)</strong> is a signed string carrying <em>claims</em>, such as the user id (<code>sub</code>), the role, and an expiry (<code>exp</code>). The server signs it with a secret key (here HMAC-SHA256, <code>HS256</code>) and can later verify that it was issued by the server and has not been altered, without a database lookup. This makes the server <em>stateless</em> about sessions. The trade-off is that a token stays valid until it expires, even if the user is later deactivated or demoted, unless the server adds extra checks.</p>
+<h3>2.2.5 Role-based access control</h3>
+<p>In <strong>role-based access control (RBAC)</strong>, permissions attach to roles and users are given roles. SVDS uses three, in a hierarchy: <strong>reportee</strong> (public) ⊂ <strong>police</strong> ⊂ <strong>admin</strong>. The principle of <em>least privilege</em> says each role should have only what it needs. Checks must run on the server: hiding a button in the user interface is not access control, because a client can send any request.</p>
+<h3>2.2.6 Audit logging</h3>
+<p>An <strong>audit log</strong> records who performed which significant action on what, and when. It supports accountability and later investigation, which matters in a police system where a report can be activated, altered or deleted.</p>
+<h2>2.3 Existing Systems / Related Work</h2>
+<ul>
+<li><strong>Django REST Framework / Flask</strong> are common Python alternatives. They offer built-in or add-on authentication and permission classes. FastAPI was chosen here for its automatic validation and documentation and for explicit dependency-based access checks.</li>
+<li><strong>OAuth 2.0 / OpenID Connect providers</strong> (for example Keycloak or Auth0) provide hardened login, refresh tokens, revocation and multi-factor authentication. They are the mature answer for production but add a service to run and configure; this project implements a small self-contained equivalent.</li>
+<li><strong>The OWASP guidance</strong> (the OWASP Top 10 and the API Security Top 10) lists the risks a system like this should be checked against: broken access control, cryptographic failures, identification and authentication failures, security misconfiguration, and excessive data exposure. The security review in Chapter 6 uses these categories as a checklist.</li>
+<li><strong>Police records systems</strong> in the public domain are mostly closed. Published descriptions concentrate on data content, not on how access is enforced, so no detailed comparison is possible.</li>
+</ul>
+<p><em>Note on sources.</em> This chapter relies on the projects' public documentation and standards, listed in the References. No performance or security figures from other systems are quoted.</p>
+<h2>2.4 Comparative Analysis</h2>
+<table>
+<thead>
+<tr>
+<th>Criterion</th>
+<th>This project (FastAPI + own JWT)</th>
+<th>Django REST Framework</th>
+<th>Hosted identity provider</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Setup effort</td>
+<td>Low</td>
+<td>Medium</td>
+<td>Medium to high</td>
+</tr>
+<tr>
+<td>Token revocation / refresh</td>
+<td>Not implemented</td>
+<td>Available via add-ons</td>
+<td>Built in</td>
+</tr>
+<tr>
+<td>Multi-factor authentication</td>
+<td>No</td>
+<td>Add-on</td>
+<td>Built in</td>
+</tr>
+<tr>
+<td>Understandable end to end by a student team</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Less (external service)</td>
+</tr>
+<tr>
+<td>Suitable for production as is</td>
+<td>No (see Chapter 6)</td>
+<td>With configuration</td>
+<td>Yes</td>
+</tr>
+</tbody>
+</table>
+<p>The table compares design properties, not measured performance.</p>
+<h2>2.5 Research / Knowledge Gap</h2>
+<p>Tutorials show how to add JWT login to FastAPI, but rarely show a <em>verified</em> account of what such a design does and does not protect against. The gap this report addresses is a working, tested role-based backend for a stolen-vehicle registry, together with <strong>demonstrated</strong> (not assumed) limitations of the token design.</p>
+<h2>2.6 Conceptual Framework</h2>
+<p>The backend follows a layered flow in which each request passes the same gates:</p>
+<pre><code>HTTP request → CORS check → JWT decoded (get_current_user)
+             → role check (require_role) → input validation (Pydantic)
+             → business rule (ownership, status) → database → audit record → response
+</code></pre>
+<p>Authentication answers "who is this?", authorisation answers "may they do this?", and the audit record answers "what happened?".</p>
+<h2>2.7 Chapter Summary</h2>
+<p>FastAPI, SQLAlchemy/PostgreSQL, bcrypt and JWT are standard, well-documented building blocks. A JWT-based RBAC design is simple and stateless but leaves token-lifetime weaknesses unless extra checks are added. The backend uses this design and the following chapters evaluate it, including where it falls short.</p><h1>Chapter 3: Methodology</h1>
+<h2>3.1 Introduction</h2>
+<p>This chapter explains how the backend was developed and evaluated: the approach, how requirements were obtained, the architecture, tools, ethical and legal considerations, and the evaluation method.</p>
+<h2>3.2 Research / Development Approach</h2>
+<p>The project was built <strong>iteratively</strong>. The web application (backend and frontend) and the camera-node pipeline were two work-streams that met at one point, <code>POST /alerts/check-plate</code>. For the backend, work proceeded in slices: data model first, then authentication, then role checks, then the report lifecycle, then the plate-match endpoint and the alert and analytics routes. Each slice was tried through FastAPI's interactive <code>/docs</code> page and later covered by automated tests.</p>
+<p>A <strong>design-and-verify</strong> approach was used for security: after the features worked, the code was read for weaknesses, each suspected weakness was turned into a short probe test, and only behaviour actually observed was recorded as a finding (§6.4).</p>
+<pre><code>Requirements → Design → Implementation → Integration → Testing / Security review → (issues found? back)
+</code></pre>
+<h2>3.3 Requirements / Data Collection</h2>
+<p>Requirements came from (a) the gap in Chapter 1, (b) the natural three-way split of people who touch a stolen-vehicle report (the person who filed it, the officer investigating it, the administrator), and (c) the needs of the other components: the camera node needs one endpoint, the front end needs role-scoped listings, and the real-time member needs a hook to broadcast alerts. No stakeholder interviews or surveys are recorded, so the requirements are the group's own analysis.</p>
+<p>The data handled by the backend is personal and sensitive: names, telephone numbers, national ID numbers, police badge numbers, vehicle details and locations. Test data used in this report is synthetic (for example <code>jane@test.local</code>); no real personal data appears in the tests.</p>
+<h2>3.4 System Architecture / Research Workflow</h2>
+<p>SVDS has three independently runnable processes that communicate only over the network: <code>vrrs-backend</code> (this report), <code>vrrs-frontend</code> and <code>vrrs-node</code>.</p>
+<p><img alt="Figure 3.1: SVDS system architecture" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/04-system-design-1.png" /></p>
+<h2>3.5 Tools and Technologies</h2>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Technology</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language</td>
+<td>Python</td>
+</tr>
+<tr>
+<td>Web framework</td>
+<td>FastAPI 0.111.0 with Uvicorn 0.29.0</td>
+</tr>
+<tr>
+<td>Database</td>
+<td>PostgreSQL, accessed through <code>psycopg2-binary</code> 2.9.9</td>
+</tr>
+<tr>
+<td>ORM</td>
+<td>SQLAlchemy 2.0.30 (Alembic 1.13.1 is listed in <code>requirements.txt</code> but not wired up)</td>
+</tr>
+<tr>
+<td>Validation</td>
+<td>Pydantic 2.7.1</td>
+</tr>
+<tr>
+<td>Password hashing</td>
+<td><code>passlib[bcrypt]</code> 1.7.4 with <code>bcrypt</code> 4.1.3</td>
+</tr>
+<tr>
+<td>Tokens</td>
+<td><code>python-jose[cryptography]</code> 3.3.0, algorithm HS256</td>
+</tr>
+<tr>
+<td>Configuration</td>
+<td><code>python-dotenv</code> (<code>.env</code>)</td>
+</tr>
+<tr>
+<td>Testing</td>
+<td>pytest with FastAPI <code>TestClient</code> and in-memory SQLite</td>
+</tr>
+<tr>
+<td>OS</td>
+<td>Windows 11</td>
+</tr>
+</tbody>
+</table>
+<p>Versions are those pinned in <code>vrrs-backend/requirements.txt</code>.</p>
+<h2>3.6 Ethical and Legal Considerations</h2>
+<ul>
+<li><strong>Personal data.</strong> The system stores personal and police data. Access is limited by role, passwords are hashed, and every state-changing action is audited. A deployment would also need a legal basis and a retention policy under Zambian data protection law; those are not addressed by the code.</li>
+<li><strong>Data exposure.</strong> Reportees can read only their own reports. Police can read all reports and all users. The response models limit which user fields are returned (§4.4); the password hash is not among them.</li>
+<li><strong>Accountability.</strong> The audit log gives a trace of who activated, resolved or deleted a report and who changed a role, but it has gaps (§6.4).</li>
+<li><strong>False matches.</strong> A wrong plate match could point officers at an innocent driver. The backend matches only against reports police have activated, and officers can flag alerts as false positives.</li>
+<li><strong>Unauthenticated endpoint.</strong> <code>check-plate</code> is public because the camera has no user identity. This is a deliberate trade-off with a demonstrated consequence (§6.4).</li>
+<li><strong>Secrets.</strong> The signing key and database password live in a <code>.env</code> file that is not committed; <code>.env.example</code> documents the keys with placeholder values.</li>
+<li><strong>Responsible testing.</strong> Security probes were run only against the project's own code using an in-memory test database, never against a live deployment or anyone else's system.</li>
+</ul>
+<h2>3.7 Evaluation Method</h2>
+<ol>
+<li><strong>Automated tests</strong> (pytest, 31 tests) covering authentication, role access, reports, the plate-match endpoint and analytics.</li>
+<li><strong>Targeted security probes</strong>: short, temporary tests written to confirm or refute suspected weaknesses. They were run, their output recorded, and then removed so that the test suite stays a suite of intended behaviour.</li>
+<li><strong>Code review</strong> against the OWASP categories listed in §2.3.</li>
+<li><strong>Objective-by-objective review</strong> against B1 to B7 in §1.4.</li>
+</ol>
+<p>No load or performance testing and no user evaluation were carried out.</p>
+<h2>3.8 Chapter Summary</h2>
+<p>The backend was built iteratively in slices and verified by automated tests plus probe tests that check suspected weaknesses. Data handled is sensitive; test data is synthetic.</p><h1>Chapter 4: System Analysis and Design</h1>
+<h2>4.1 Introduction</h2>
+<p>This chapter presents the analysis and design of the backend. Stakeholders and the architecture are shared by the group; the requirements, data design, API design and security design are those of the <strong>backend and security component</strong>, the subject of this report.</p>
+<h2>4.2 Stakeholder and User Analysis</h2>
+<table>
+<thead>
+<tr>
+<th>Stakeholder</th>
+<th>Interest</th>
+<th>Needs from the backend</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Reportee (public)</td>
+<td>Report a theft, follow its status</td>
+<td>Register and log in; file and view <strong>only their own</strong> reports; edit own profile</td>
+</tr>
+<tr>
+<td>Police officer</td>
+<td>Investigate, activate and resolve reports, act on alerts</td>
+<td>See all reports; activate and mark found; view and flag alerts; view analytics</td>
+</tr>
+<tr>
+<td>Administrator</td>
+<td>Manage accounts and oversee the system</td>
+<td>Create police accounts, change roles, deactivate or delete users, delete reports, read the audit log</td>
+</tr>
+<tr>
+<td>Camera node</td>
+<td>Ask whether a plate is stolen</td>
+<td>One public endpoint that answers <code>CLEAR</code> or <code>STOLEN</code></td>
+</tr>
+<tr>
+<td>Front-end and real-time developers</td>
+<td>Build on the API</td>
+<td>A stable, documented API; a broadcast hook for alerts</td>
+</tr>
+</tbody>
+</table>
+<h2>4.3 Functional Requirements</h2>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Requirement</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>FR-B1</td>
+<td>Public registration creates reportee accounts only; police and admin accounts are created by an administrator.</td>
+</tr>
+<tr>
+<td>FR-B2</td>
+<td>Login with email and password returns a signed token, the role and a redirect path; deactivated accounts cannot log in.</td>
+</tr>
+<tr>
+<td>FR-B3</td>
+<td>Passwords are stored only as bcrypt hashes; a password must be at least 6 characters.</td>
+</tr>
+<tr>
+<td>FR-B4</td>
+<td>Every protected route requires a valid token; role rules are checked on the server.</td>
+</tr>
+<tr>
+<td>FR-B5</td>
+<td>A reportee can file a report; a new report starts as <code>under_review</code>. An active (<code>missing</code>) report for the same plate blocks a new one.</td>
+</tr>
+<tr>
+<td>FR-B6</td>
+<td>A reportee can list and read only their own reports; police and admin can list and read all, with search and status filters and paging.</td>
+</tr>
+<tr>
+<td>FR-B7</td>
+<td>Police can activate a report (<code>under_review</code> → <code>missing</code>) and mark it found (recording who and when). Police can edit report details.</td>
+</tr>
+<tr>
+<td>FR-B8</td>
+<td>Only an administrator can delete a report, and deleting it also deletes its alerts.</td>
+</tr>
+<tr>
+<td>FR-B9</td>
+<td>An administrator can create police accounts, change a user's role, deactivate or reactivate a user, and delete a user. An administrator cannot change, deactivate or delete their own account.</td>
+</tr>
+<tr>
+<td>FR-B10</td>
+<td><code>POST /alerts/check-plate</code> normalises the plate, matches only <code>missing</code> reports, records an alert and triggers the real-time broadcast on a match.</td>
+</tr>
+<tr>
+<td>FR-B11</td>
+<td>Police can list alerts, mark them read, and flag false positives.</td>
+</tr>
+<tr>
+<td>FR-B12</td>
+<td>State-changing actions write an audit record naming the actor, action and target.</td>
+</tr>
+<tr>
+<td>FR-B13</td>
+<td>Users can view and edit their own profile and change their password (the current password must be supplied).</td>
+</tr>
+</tbody>
+</table>
+<h2>4.4 Non-Functional Requirements</h2>
+<ul>
+<li><strong>Security:</strong> no plaintext passwords; signed, expiring tokens; server-side role checks; responses limited to the fields a client needs (<code>UserOut</code> excludes the password hash, national ID and badge number).</li>
+<li><strong>Validation:</strong> telephone numbers must match <code>+260 XX XXXXXXX</code>, national IDs <code>NNNNNN/NN/N</code>, enforced by Pydantic patterns at registration.</li>
+<li><strong>Consistency:</strong> database constraints back the business rules (unique email, foreign keys, cascade delete of alerts).</li>
+<li><strong>Maintainability:</strong> access rules are expressed once, as reusable dependencies (<code>is_reportee</code>, <code>is_police</code>, <code>is_admin</code>), not repeated in each route.</li>
+<li><strong>Testability:</strong> the database session is injected so tests can swap in an in-memory database.</li>
+<li><strong>Performance:</strong> list endpoints are paged (default 20 reports, 30 users and alerts; maximum 100).</li>
+</ul>
+<h2>4.5 Use Cases / User Stories</h2>
+<p><strong>UC-B1: Register and log in.</strong> A member of the public registers with name, email, telephone, national ID and password, and receives a token and a redirect to <code>/my</code>. On later visits they log in with email and password.
+<em>Alternate flows:</em> duplicate email (409); role other than reportee requested (400); password too short (400); wrong credentials (401); deactivated account (403).</p>
+<p><strong>UC-B2: File a report.</strong> A logged-in reportee submits plate and vehicle details. The server upper-cases the plate, refuses it if an active report for that plate exists (409), stores it as <code>under_review</code>, and writes an audit record.</p>
+<p><strong>UC-B3: Police activate and resolve a report.</strong> An officer activates an <code>under_review</code> report so it becomes matchable, and later marks it found.</p>
+<p><strong>UC-B4: Camera checks a plate.</strong> The node sends a plate; the server returns <code>CLEAR</code>, or creates an alert and returns <code>STOLEN</code> with the vehicle's make, model and colour.</p>
+<p><strong>UC-B5: Administrator manages accounts.</strong> The administrator invites an officer, changes a role (a badge number is required for police or admin), or deactivates an account.</p>
+<p><strong>User story.</strong> <em>As a member of the public, I want to see only my own reports, so that other people's theft reports and personal details stay private.</em></p>
+<h2>4.6 System / Solution Architecture</h2>
+<p><img alt="Figure 4.1: detection-to-alert sequence, which the backend's check-plate endpoint serves" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/04-system-design-4.png" /></p>
+<p>The backend is a single FastAPI application. <code>main.py</code> registers six routers (<code>auth</code>, <code>reports</code>, <code>alerts</code>, <code>users</code>, <code>analytics</code>, <code>system</code>) and the CORS middleware. Shared modules provide the database session (<code>database.py</code>), the ORM models (<code>models.py</code>), the validation schemas (<code>schemas.py</code>), password and token functions (<code>auth.py</code>), and the access-control dependencies (<code>middleware.py</code>).</p>
+<pre><code>vrrs-backend/app/
+  main.py        app, CORS, router registration, create_all()
+  database.py    engine, session, get_db
+  models.py      User, Report, Alert, AuditLog
+  schemas.py     Pydantic request/response models
+  auth.py        bcrypt + JWT
+  middleware.py  get_current_user, require_role, is_reportee/is_police/is_admin
+  routers/       auth, reports, alerts, users, analytics, system
+</code></pre>
+<h2>4.7 Database / Data Design</h2>
+<p>Four tables, defined once in <code>models.py</code>.</p>
+<p><img alt="Figure 4.2: entity-relationship diagram" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/04-system-design-2.png" /></p>
+<table>
+<thead>
+<tr>
+<th>Table</th>
+<th>Purpose</th>
+<th>Key constraints</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>users</code></td>
+<td>Accounts</td>
+<td>Primary key <code>id</code>; unique, indexed <code>email</code>; <code>role</code> string (<code>reportee</code>, <code>police</code>, <code>admin</code>); <code>is_active</code> flag; <code>password_hash</code></td>
+</tr>
+<tr>
+<td><code>reports</code></td>
+<td>Stolen-vehicle reports</td>
+<td>Foreign key <code>reported_by</code> → <code>users</code>; <code>resolved_by</code> → <code>users</code>; indexed <code>license_plate</code>; <code>status</code> string</td>
+</tr>
+<tr>
+<td><code>alerts</code></td>
+<td>Detections</td>
+<td>Foreign key <code>report_id</code> → <code>reports</code> with <code>ON DELETE CASCADE</code></td>
+</tr>
+<tr>
+<td><code>audit_log</code></td>
+<td>Action trail</td>
+<td>Foreign key <code>performed_by</code> → <code>users</code> (nullable)</td>
+</tr>
+</tbody>
+</table>
+<p>Design decisions:
+- <strong><code>alerts.license_plate</code> is not stored.</strong> It is a computed property reading through the linked report, avoiding duplicated data.
+- <strong>Cascade delete.</strong> Deleting a report also deletes its alerts (the ORM relationship uses <code>cascade="all, delete-orphan"</code>, and the database constraint uses <code>ON DELETE CASCADE</code>).
+- <strong>Roles and statuses are plain strings</strong>, not database enumerations or check constraints. This is simple, but the database itself does not stop an invalid value (§6.4).
+- <strong>No migration tool.</strong> <code>Base.metadata.create_all()</code> runs at start-up. It creates missing tables but never changes existing ones, so a constraint change on an existing table needs a manual <code>ALTER TABLE</code>.</p>
+<h2>4.8 Interface / Interaction Design</h2>
+<p>The backend's interface is its HTTP API, documented automatically at <code>/docs</code>. Access is by role (<code>✔</code> allowed):</p>
+<table>
+<thead>
+<tr>
+<th>Route group</th>
+<th>Endpoint(s)</th>
+<th>Reportee</th>
+<th>Police</th>
+<th>Admin</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Auth</td>
+<td><code>POST /auth/register</code>, <code>/auth/login</code>, <code>/auth/logout</code></td>
+<td>public</td>
+<td>public</td>
+<td>public</td>
+</tr>
+<tr>
+<td>Reports</td>
+<td><code>POST /reports/</code>, <code>GET /reports/</code>, <code>GET /reports/{id}</code></td>
+<td>✔ (own only for reads)</td>
+<td>✔ all</td>
+<td>✔ all</td>
+</tr>
+<tr>
+<td>Reports</td>
+<td><code>PATCH /reports/{id}</code>, <code>/activate</code>, <code>/found</code></td>
+<td></td>
+<td>✔</td>
+<td>✔</td>
+</tr>
+<tr>
+<td>Reports</td>
+<td><code>DELETE /reports/{id}</code></td>
+<td></td>
+<td></td>
+<td>✔</td>
+</tr>
+<tr>
+<td>Alerts</td>
+<td><code>POST /alerts/check-plate</code></td>
+<td>public</td>
+<td>public</td>
+<td>public</td>
+</tr>
+<tr>
+<td>Alerts</td>
+<td><code>GET /alerts/</code>, <code>/{id}</code>, <code>/unread/count</code>, <code>PATCH .../read</code>, <code>/read-all</code>, <code>/false-positive</code></td>
+<td></td>
+<td>✔</td>
+<td>✔</td>
+</tr>
+<tr>
+<td>Users</td>
+<td><code>GET/PATCH /users/me</code>, <code>PATCH /users/me/password</code></td>
+<td>✔</td>
+<td>✔</td>
+<td>✔</td>
+</tr>
+<tr>
+<td>Users</td>
+<td><code>GET /users/</code>, <code>GET /users/{id}</code></td>
+<td></td>
+<td>✔</td>
+<td>✔</td>
+</tr>
+<tr>
+<td>Users</td>
+<td><code>POST /users/invite</code>, <code>PATCH /users/{id}/role</code>, <code>/toggle-active</code>, <code>DELETE /users/{id}</code></td>
+<td></td>
+<td></td>
+<td>✔</td>
+</tr>
+<tr>
+<td>Analytics</td>
+<td><code>GET /analytics/...</code></td>
+<td></td>
+<td>✔</td>
+<td>✔ (<code>user-growth</code> admin only)</td>
+</tr>
+<tr>
+<td>System</td>
+<td><code>GET /system/audit</code></td>
+<td></td>
+<td></td>
+<td>✔</td>
+</tr>
+</tbody>
+</table>
+<p>The web pages that use these routes were designed by the frontend member.</p>
+<h2>4.9 Algorithms / Models / Technical Design</h2>
+<h3>4.9.1 Authentication and token design</h3>
+<p><img alt="Figure 4.3: authentication sequence" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/04-system-design-3.png" /></p>
+<p>On login the server looks up the user by lower-cased email, verifies the password against the stored bcrypt hash, rejects deactivated accounts, writes an audit record, and returns a JWT whose claims are <code>sub</code> (user id), <code>role</code> and <code>exp</code> (default 24 hours, configurable). The token is signed with HS256 using <code>SECRET_KEY</code> from the environment. On each request, <code>get_current_user</code> decodes the token and returns the user id and role <strong>taken from the token</strong>.</p>
+<h3>4.9.2 Role enforcement</h3>
+<p><code>require_role(*roles)</code> builds a dependency that returns <code>403</code> if the token's role is not in the list. Three shortcuts wrap it: <code>is_reportee</code> (all three roles), <code>is_police</code> (police and admin), <code>is_admin</code> (admin only). Routes attach them with <code>Depends(...)</code>. Row-level rules are added inside the route: a reportee's list is filtered by <code>reported_by</code>, and reading another reportee's report returns 403.</p>
+<p><img alt="Figure 4.4: role-based route access" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/04-system-design-5.png" /></p>
+<h3>4.9.3 Plate matching</h3>
+<p><code>check-plate</code> removes every character except letters and digits from the received plate, upper-cases it, and compares it with the same normalisation applied to the stored plate in SQL (<code>regexp_replace(upper(license_plate), '[^A-Z0-9]', '', 'g')</code>). It matches only reports whose status is <code>missing</code>. This makes <code>abc 1234</code>, <code>ABC-1234</code> and <code>ABC1234</code> equal. On a match it inserts an alert, calls the WebSocket broadcast (the real-time member's component) and returns <code>STOLEN</code> with make, model and colour.</p>
+<h3>4.9.4 Report lifecycle</h3>
+<pre><code>under_review --(police: activate)--&gt; missing --(police: mark found)--&gt; found
+</code></pre>
+<p>Only <code>missing</code> reports are matched. <code>activate</code> accepts only <code>under_review</code>; <code>found</code> refuses a report that is already found. The general <code>PATCH /reports/{id}</code> route is separate and is discussed in §6.4.</p>
+<h2>4.10 Chapter Summary</h2>
+<p>The backend is a FastAPI service over four PostgreSQL tables. Access control is expressed as three reusable role dependencies plus per-row ownership rules. Authentication uses bcrypt and a signed JWT that carries the role. The plate-match endpoint normalises both sides so formatting differences do not prevent a match.</p><h1>Chapter 5: Implementation / Development</h1>
+<h2>5.1 Introduction</h2>
+<p>This chapter describes how the backend was built: its modules, the key implementation decisions, how it connects to the other components, the problems met, and the student's own contribution.</p>
+<h2>5.2 Development Environment</h2>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Machine</td>
+<td>Windows 11 PC</td>
+</tr>
+<tr>
+<td>Language and runtime</td>
+<td>Python (the test virtual environment used Python 3.12.10)</td>
+</tr>
+<tr>
+<td>Database</td>
+<td>PostgreSQL (<code>vrrs_db</code>), connection string from <code>DATABASE_URL</code></td>
+</tr>
+<tr>
+<td>Frameworks</td>
+<td>FastAPI 0.111.0, SQLAlchemy 2.0.30, Pydantic 2.7.1</td>
+</tr>
+<tr>
+<td>Security libraries</td>
+<td>passlib 1.7.4 + bcrypt 4.1.3, python-jose 3.3.0</td>
+</tr>
+<tr>
+<td>Tools</td>
+<td>Swagger UI at <code>/docs</code> for manual trials, pytest for automated tests, Git</td>
+</tr>
+<tr>
+<td>Configuration</td>
+<td><code>.env</code> (not committed); <code>.env.example</code> lists <code>DATABASE_URL</code>, <code>SECRET_KEY</code>, <code>ALGORITHM</code>, <code>TOKEN_EXPIRY_HOURS</code>, <code>CORS_ORIGINS</code></td>
+</tr>
+</tbody>
+</table>
+<h2>5.3 System Components / Modules</h2>
+<table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Lines</th>
+<th>Purpose</th>
+<th>Built by</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>app/main.py</code></td>
+<td>55</td>
+<td>App creation, CORS, router registration, schema creation</td>
+<td>Backend (this report)</td>
+</tr>
+<tr>
+<td><code>app/database.py</code></td>
+<td>20</td>
+<td>Engine, session factory, <code>get_db</code> dependency</td>
+<td>Backend (this report)</td>
+</tr>
+<tr>
+<td><code>app/models.py</code></td>
+<td>65</td>
+<td><code>User</code>, <code>Report</code>, <code>Alert</code>, <code>AuditLog</code> ORM models</td>
+<td>Backend (this report)</td>
+</tr>
+<tr>
+<td><code>app/schemas.py</code></td>
+<td>132</td>
+<td>Pydantic request and response models with validation patterns</td>
+<td>Backend (this report)</td>
+</tr>
+<tr>
+<td><code>app/auth.py</code></td>
+<td>33</td>
+<td>bcrypt hashing; JWT create and decode</td>
+<td>Backend (this report)</td>
+</tr>
+<tr>
+<td><code>app/middleware.py</code></td>
+<td>34</td>
+<td><code>get_current_user</code>, <code>require_role</code>, role shortcuts</td>
+<td>Backend (this report)</td>
+</tr>
+<tr>
+<td><code>app/routers/auth.py</code></td>
+<td>48</td>
+<td>Register, login, logout</td>
+<td>Backend (this report)</td>
+</tr>
+<tr>
+<td><code>app/routers/users.py</code></td>
+<td>125</td>
+<td>Profile, password change, admin user management</td>
+<td>Backend (this report)</td>
+</tr>
+<tr>
+<td><code>app/routers/reports.py</code></td>
+<td>94</td>
+<td>Report create, list, read, update, activate, found, delete</td>
+<td>Backend (this report)</td>
+</tr>
+<tr>
+<td><code>app/routers/alerts.py</code></td>
+<td>123</td>
+<td><code>check-plate</code> and alert listing (this report); WebSocket manager and endpoint (real-time member)</td>
+<td>Shared</td>
+</tr>
+<tr>
+<td><code>app/routers/analytics.py</code>, <code>system.py</code></td>
+<td>87, 146</td>
+<td>Statistics; audit-log listing, camera status, feed proxy, health</td>
+<td>Frontend and real-time members</td>
+</tr>
+<tr>
+<td><code>tests/</code></td>
+<td>5 test files and <code>conftest.py</code></td>
+<td>Automated tests</td>
+<td>See §5.7</td>
+</tr>
+</tbody>
+</table>
+<p>Line counts are from the files as they stand.</p>
+<h2>5.4 Key Implementation Details</h2>
+<h3>5.4.1 Password hashing and tokens (<code>auth.py</code>)</h3>
+<pre><code class="language-python">pwd_context = CryptContext(schemes=[&quot;bcrypt&quot;], deprecated=&quot;auto&quot;)
+
+def hash_password(password): return pwd_context.hash(password)
+def verify_password(plain, hashed): return pwd_context.verify(plain, hashed)
+
+def create_access_token(user_id, role):
+    payload = {&quot;sub&quot;: str(user_id), &quot;role&quot;: role,
+               &quot;exp&quot;: datetime.utcnow() + timedelta(hours=TOKEN_EXPIRY_HOURS)}
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+</code></pre>
+<p><code>decode_token</code> returns <code>None</code> on any signature or expiry error. The signing key is read from the environment. The code falls back to the string <code>"changeme"</code> if <code>SECRET_KEY</code> is unset; on the development machine the key is set and is not the default (checked, §6.4).</p>
+<h3>5.4.2 Access control (<code>middleware.py</code>)</h3>
+<pre><code class="language-python">def require_role(*roles):
+    def checker(user: dict = Depends(get_current_user)):
+        if user[&quot;role&quot;] not in roles:
+            raise HTTPException(status_code=403, detail=f&quot;Access denied. Required roles: {list(roles)}&quot;)
+        return user
+    return checker
+
+is_reportee = require_role(&quot;reportee&quot;, &quot;police&quot;, &quot;admin&quot;)
+is_police   = require_role(&quot;police&quot;, &quot;admin&quot;)
+is_admin    = require_role(&quot;admin&quot;)
+</code></pre>
+<p>(In the source these are small wrapper functions; they are shown here in condensed form.) A route needs one line to require a role, for example <code>user=Depends(is_admin)</code>.</p>
+<h3>5.4.3 Ownership and lifecycle rules (<code>reports.py</code>)</h3>
+<ul>
+<li><code>create_report</code> upper-cases and trims the plate, returns 409 if a <code>missing</code> report with that plate exists, saves the report as <code>under_review</code>, and writes an audit row.</li>
+<li><code>get_reports</code> filters by <code>reported_by</code> when the caller is a reportee, and supports <code>status</code>, <code>search</code> (plate or owner name, case-insensitive), <code>skip</code> and <code>limit</code>.</li>
+<li><code>get_report</code> returns 403 if a reportee asks for someone else's report.</li>
+<li><code>activate_report</code> accepts only <code>under_review</code>; <code>mark_found</code> records <code>resolved_by</code> and <code>resolved_date</code>.</li>
+<li><code>delete_report</code> is admin-only and relies on the cascade to remove alerts.</li>
+</ul>
+<h3>5.4.4 Plate matching (<code>alerts.py</code>)</h3>
+<pre><code class="language-python">normalized = re.sub(r&quot;[^A-Z0-9]&quot;, &quot;&quot;, data.license_plate.upper())
+report = db.query(Report).filter(
+    func.regexp_replace(func.upper(Report.license_plate), r&quot;[^A-Z0-9]&quot;, &quot;&quot;, &quot;g&quot;) == normalized,
+    Report.status == &quot;missing&quot;,
+).first()
+if not report:
+    return {&quot;status&quot;: &quot;CLEAR&quot;}
+new_alert = Alert(report_id=report.id, ...)
+db.add(new_alert); db.commit()
+await manager.broadcast({... &quot;type&quot;: &quot;STOLEN_DETECTED&quot; ...})
+return {&quot;status&quot;: &quot;STOLEN&quot;, &quot;alert_id&quot;: new_alert.id, &quot;vehicle&quot;: {...}}
+</code></pre>
+<h3>5.4.5 Admin safeguards (<code>users.py</code>)</h3>
+<p>An administrator cannot change, deactivate or delete their own account (prevents locking out the last admin by accident). Assigning <code>police</code> or <code>admin</code> requires the target user to have a badge number. Password change requires the current password and rejects an unchanged or too-short new password. <code>UserUpdate</code>, the model used for profile edits, has no <code>role</code> or <code>is_active</code> field, so a user cannot promote themselves through their profile.</p>
+<h3>5.4.6 Audit records</h3>
+<p>Registration, login, report filing, updates, activation, found, deletion, account creation, role change, activation or deactivation of an account, password change, profile update and false-positive flags each add an <code>AuditLog</code> row with the actor's id, a text description, the target table and the target id.</p>
+<h2>5.5 Integration</h2>
+<ul>
+<li><strong>Camera node (AI/vision member):</strong> the only contract is <code>POST /alerts/check-plate</code> with <code>license_plate</code>, <code>camera_id</code>, <code>confidence_score</code>, <code>location_spotted</code> and optional <code>image_path</code>. The backend normalises the plate itself, so the node does not need to reproduce the matching rules.</li>
+<li><strong>Real-time member:</strong> <code>check-plate</code> calls the <code>ConnectionManager.broadcast</code> method they wrote; the WebSocket handshake reuses <code>decode_token</code> and admits only police and admin tokens.</li>
+<li><strong>Frontend member:</strong> the front end calls the routes in §4.8 with the token in an <code>Authorization: Bearer</code> header and reads the role from the login response. CORS is limited to the local development origins <code>localhost:5173</code> and <code>5174</code> (and <code>127.0.0.1</code> equivalents).</li>
+</ul>
+<p>Note: <code>main.py</code> builds the CORS list from four hard-coded origins. <code>CORS_ORIGINS</code> appears in <code>.env.example</code> but is not read by the application code, so changing it has no effect (checked by searching the source).</p>
+<h2>5.6 Challenges and Solutions</h2>
+<table>
+<thead>
+<tr>
+<th>Challenge</th>
+<th>Cause</th>
+<th>Solution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Deleting a report that had detections failed with a database error</td>
+<td>The <code>alerts.report_id</code> foreign key was created with no delete action</td>
+<td>Added <code>ondelete="CASCADE"</code> to the foreign key and <code>cascade="all, delete-orphan"</code> to the relationship. Because <code>create_all()</code> does not alter existing tables, the live constraint was also altered by hand and the change verified in PostgreSQL's constraint catalogue. Covered by a regression test</td>
+</tr>
+<tr>
+<td>A PostgreSQL-only function in <code>check-plate</code> could not run under the test database</td>
+<td>SQLite has no four-argument <code>regexp_replace</code></td>
+<td>The test set-up registers a Python implementation on each SQLite connection, so the production query runs unchanged in tests</td>
+</tr>
+<tr>
+<td>Cascade delete did not fire in tests</td>
+<td>SQLite ignores foreign keys unless enabled</td>
+<td>The test set-up runs <code>PRAGMA foreign_keys=ON</code> per connection</td>
+</tr>
+<tr>
+<td>Tests must not touch the real database</td>
+<td><code>database.py</code> connects to PostgreSQL at import</td>
+<td>The tests override the <code>get_db</code> dependency with an in-memory SQLite session using a static pool</td>
+</tr>
+<tr>
+<td>Camera cannot log in</td>
+<td>It has no user identity</td>
+<td><code>check-plate</code> is left public and limited in what it can do (it cannot create or alter reports); see §6.4 for the consequence</td>
+</tr>
+<tr>
+<td>Roles enforced only in the UI would be bypassable</td>
+<td>Clients can send any request</td>
+<td>Every route declares its role dependency; a parametrised test hits police and admin routes as a reportee</td>
+</tr>
+</tbody>
+</table>
+<h2>5.7 Individual Contribution (group project)</h2>
+<p>The student was responsible for <strong>work areas 3 and 4</strong> of the group's seven (Appendix A): the backend API and database, and security and access control. This covers:</p>
+<ul>
+<li>the four-table data model and its relationships, keys and cascade;</li>
+<li>the FastAPI application structure and configuration;</li>
+<li>registration, login, password hashing and token issue and checking;</li>
+<li>the role dependencies and the ownership rules on reports;</li>
+<li>user management, including the admin safeguards;</li>
+<li>the report lifecycle endpoints and the plate-match endpoint;</li>
+<li>writing of audit records;</li>
+<li>the security review in Chapter 6.</li>
+</ul>
+<p>Work by other members that this component uses, <strong>not claimed here</strong>: the WebSocket manager and endpoint, camera status, live-feed proxy and system health (real-time and integration member); analytics endpoints and the React pages (frontend member); the detection model and camera node (AI/vision member).</p>
+<p><em>Tests.</em> The group's role split placed "tests" with the frontend member. The 31 backend tests exercise this component, and the student ran them and interpreted their results for this report. <strong>Who wrote each test file should be confirmed by the student before submission</strong>; §6.3 describes them without claiming authorship.</p>
+<h2>5.8 Chapter Summary</h2>
+<p>The backend is about 730 lines of Python across ten modules (<code>main.py</code>, <code>database.py</code>, <code>models.py</code>, <code>schemas.py</code>, <code>auth.py</code>, <code>middleware.py</code> and four routers; the generic <code>model.py</code> placeholder is not counted). It hashes passwords with bcrypt, issues signed role-carrying tokens, enforces roles with reusable dependencies, and answers plate-match queries. Its notable implementation problems were the missing cascade and the gap between PostgreSQL and the SQLite test database.</p><h1>Chapter 6: Testing, Results and Evaluation</h1>
+<h2>6.1 Introduction</h2>
+<p>This chapter evaluates the backend. It reports the automated test results, then the security findings from targeted probes, then judges each individual objective. Every result below comes from output that was produced during the preparation of this report and can be re-run.</p>
+<h3>6.1.1 Version of the code evaluated</h3>
+<p><strong>Note on the version of the code evaluated.</strong> All findings, test counts, coverage figures and line counts in this report were obtained against the code as committed (commit <code>a349fc6</code>). After that evaluation, uncommitted changes appeared in the working tree (<code>middleware.py</code>, <code>alerts.py</code>, <code>system.py</code>, <code>main.py</code>, <code>api.js</code>, <code>SystemHealth.jsx</code>, <code>conftest.py</code>, a new <code>tests/test_regressions.py</code> and a new front-end test). With those changes the backend suite has <strong>38 tests, all passing</strong>, and the front end has <strong>one</strong> test (<code>npm test</code>), which also passes. The changes appear to address the items listed below; this was established by reading the changes and running the tests, and the original probes were <strong>not</strong> re-run against the changed code. Where this report says a finding was "not fixed", it refers to the evaluated commit.</p>
+<p><em>Appear addressed in the working tree:</em> <strong>F-1</strong> and <strong>F-2</strong> (every request now re-reads the user from the database, so a deactivated or demoted user's old token is rejected, and the role comes from the database, not the token) and <strong>F-9</strong> (<code>CORS_ORIGINS</code> is now read). <em>Still open as far as the changes show:</em> F-3, F-4, F-5, F-6, F-7 (logout does not end a session by itself), F-8 and F-10.</p>
+<h2>6.2 Testing Strategy</h2>
+<table>
+<thead>
+<tr>
+<th>Level</th>
+<th>Technique</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Integration (API)</td>
+<td>pytest with FastAPI <code>TestClient</code>, real routes, real ORM</td>
+<td>Auth, RBAC, reports, plate matching, analytics</td>
+</tr>
+<tr>
+<td>Security probing</td>
+<td>Short temporary tests confirming suspected weaknesses</td>
+<td>Token lifetime, status validation, public endpoint, login attempts, signing key, logout</td>
+</tr>
+<tr>
+<td>Code review</td>
+<td>Reading the source against OWASP categories</td>
+<td>All backend modules</td>
+</tr>
+<tr>
+<td>Acceptance / user testing</td>
+<td>None</td>
+<td>See §6.5</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Test environment.</strong> The tests use an in-memory SQLite database, not PostgreSQL, and the real <code>get_db</code> dependency is replaced by an override. Two SQLite gaps are closed in <code>conftest.py</code>: foreign keys are switched on, and a Python version of PostgreSQL's four-argument <code>regexp_replace</code> is registered so the production matching query runs unchanged. This means results say nothing about behaviour that differs between SQLite and PostgreSQL (for example locking, data types or the constraint catalogue).</p>
+<h2>6.3 Test Cases and Results</h2>
+<p>The suite has <strong>31 tests, all passing</strong> (re-run while preparing this report; the original captured output is in <code>thesis/assets/test-results/backend-pytest-output.txt</code>).</p>
+<p><strong>Table 6.1: Automated test cases</strong></p>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Area</th>
+<th>Test case</th>
+<th>Expected result</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TC-01</td>
+<td>Auth</td>
+<td>Register a reportee</td>
+<td>201; role <code>reportee</code>; redirect <code>/my</code></td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-02</td>
+<td>Auth</td>
+<td>Register with an existing email</td>
+<td>Rejected</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-03</td>
+<td>Auth</td>
+<td>Register asking for a non-reportee role</td>
+<td>Rejected</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-04</td>
+<td>Auth</td>
+<td>Register with a short password</td>
+<td>Rejected</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-05</td>
+<td>Auth</td>
+<td>Login with correct credentials</td>
+<td>Token returned</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-06</td>
+<td>Auth</td>
+<td>Login with a wrong password</td>
+<td>401</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-07</td>
+<td>Auth</td>
+<td>Login to a deactivated account</td>
+<td>Rejected</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-08</td>
+<td>Auth</td>
+<td>Protected route without a token</td>
+<td>401</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-09 to TC-12</td>
+<td>RBAC</td>
+<td>Reportee requests <code>/users/</code>, <code>/system/audit</code>, <code>/alerts/</code>, <code>/analytics/summary</code></td>
+<td>403 each</td>
+<td>Pass (4 cases)</td>
+</tr>
+<tr>
+<td>TC-13, TC-14</td>
+<td>RBAC</td>
+<td>Police request <code>/system/audit</code>, <code>/analytics/user-growth</code></td>
+<td>403 each</td>
+<td>Pass (2 cases)</td>
+</tr>
+<tr>
+<td>TC-15</td>
+<td>RBAC</td>
+<td>Police request <code>/alerts/</code></td>
+<td>200</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-16</td>
+<td>RBAC</td>
+<td>Admin request <code>/system/audit</code></td>
+<td>200</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-17</td>
+<td>RBAC</td>
+<td>Reportee tries to delete a report</td>
+<td>403</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-18</td>
+<td>Reports</td>
+<td>Reportee files a report</td>
+<td>201; plate upper-cased; <code>under_review</code></td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-19</td>
+<td>Reports</td>
+<td>A second report while the first is only <code>under_review</code></td>
+<td>201 (allowed; see §6.4 finding F-5)</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-20</td>
+<td>Reports</td>
+<td>Filing against a plate with a <code>missing</code> report</td>
+<td>409</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-21</td>
+<td>Reports</td>
+<td>Reportee lists reports</td>
+<td>Sees only their own</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-22</td>
+<td>Reports</td>
+<td>Police activate then mark found</td>
+<td><code>missing</code> then <code>found</code>; <code>resolved_by</code> set</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-23</td>
+<td>Reports</td>
+<td>Admin deletes a report that has an alert</td>
+<td>204; report and alert both gone</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-24</td>
+<td>Plate match</td>
+<td>Unknown plate</td>
+<td><code>CLEAR</code></td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-25</td>
+<td>Plate match</td>
+<td>Exact plate on a <code>missing</code> report</td>
+<td><code>STOLEN</code></td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-26</td>
+<td>Plate match</td>
+<td>Different case and spacing</td>
+<td><code>STOLEN</code></td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-27</td>
+<td>Plate match</td>
+<td>Plate on a <code>found</code> report</td>
+<td><code>CLEAR</code></td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-28</td>
+<td>Alerts</td>
+<td>Unread count and marking read</td>
+<td>Counts update</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-29</td>
+<td>Alerts</td>
+<td>Flag false positive</td>
+<td>Audit row written</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-30, TC-31</td>
+<td>Analytics</td>
+<td>Confidence averages across mixed scales</td>
+<td>Normalised</td>
+<td>Pass (owned by the analytics work; listed for completeness)</td>
+</tr>
+</tbody>
+</table>
+<p>Counting the parametrised cases, this is 31 tests. TC-19 is worth reading closely: it is a test that <em>documents</em> current behaviour, and that behaviour is itself a weakness (F-5).</p>
+<h2>6.4 Security Findings from Probes</h2>
+<p>Seven probe tests were written as temporary tests, run against the in-memory database, and then deleted, so the shipped suite stays a specification of intended behaviour. They produced findings F-1 to F-4, F-6 and F-7 and the key check in F-8; one probe was invalid (see below) and is not reported. F-5 comes from an existing test (TC-19), not a probe.</p>
+<p><strong>Table 6.2: Findings</strong></p>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Suspected weakness</th>
+<th>What was observed</th>
+<th>Severity (student's judgement)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F-1</td>
+<td>A token stays valid after the user is deactivated</td>
+<td>After setting <code>is_active = False</code>, the user's existing token still got <code>200</code> from <code>GET /users/me</code>, while a fresh login was refused with 403</td>
+<td>High</td>
+</tr>
+<tr>
+<td>F-2</td>
+<td>A token keeps the role it was issued with</td>
+<td>After an admin was demoted to reportee, their old token still got <code>200</code> from <code>GET /system/audit</code> (an admin-only route)</td>
+<td>High</td>
+</tr>
+<tr>
+<td>F-3</td>
+<td><code>PATCH /reports/{id}</code> accepts any status</td>
+<td>A police user set <code>status</code> to <code>"banana"</code>; the server returned <code>200</code> and stored it. The same route can also set <code>missing</code> without going through <code>activate</code></td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>F-4</td>
+<td><code>check-plate</code> is unauthenticated and not rate-limited</td>
+<td>Three identical unauthenticated calls for one active plate returned <code>STOLEN</code> three times and created <strong>three</strong> alert rows</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>F-5</td>
+<td>The duplicate-report check ignores <code>under_review</code> reports</td>
+<td>A second report for the same plate was accepted while the first was <code>under_review</code> (TC-19)</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>F-6</td>
+<td>No limit on failed logins</td>
+<td>Twenty wrong-password attempts against one account all returned <code>401</code>; none was locked out or slowed</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>F-7</td>
+<td>Logout does not invalidate the token</td>
+<td>After <code>POST /auth/logout</code>, the same token still got <code>200</code> from <code>GET /users/me</code></td>
+<td>Medium</td>
+</tr>
+</tbody>
+</table>
+<p>Three further observations came from reading and from checking configuration:</p>
+<ul>
+<li><strong>F-8 Signing key.</strong> The code falls back to <code>"changeme"</code> if <code>SECRET_KEY</code> is unset. A check showed the development configuration uses a 47-character key that is not the default, and a token forged with <code>"changeme"</code> was rejected. The weakness is therefore <em>latent</em> (a deployment that forgets to set the variable would be forgeable), not active.</li>
+<li><strong>F-10 Admin seed script.</strong> <code>vrrs-backend/create_admin.py</code>, the script that creates the first administrator, falls back to a hard-coded default password if <code>ADMIN_PASSWORD</code> is not set, prints the credentials to the console, and is committed to the repository. Anyone who runs it without setting the variable creates an administrator with a password that is public in the source. It also defaults <code>DATABASE_URL</code> to a local SQLite file if none is set. This was found by reading the script; it was not run.</li>
+<li><strong>F-9 CORS configuration.</strong> <code>CORS_ORIGINS</code> in <code>.env.example</code> is not used; origins are hard-coded to localhost. This is safe for development but means the setting does nothing, and a real deployment would need a code change.</li>
+</ul>
+<p><strong>A probe that was invalid.</strong> A probe intended to test whether a six-character password such as <code>abcdef</code> is accepted at registration used an incomplete payload (missing the required national ID) and returned <code>422</code> for that reason. It shows nothing about the password rule, so <strong>no finding is claimed</strong>. The password minimum (six characters, enforced in the route) is covered by TC-04. Six characters is short by current guidance and there is no complexity check, which is a design observation, not a probe result.</p>
+<p>Additional points from reading the code (not probed):</p>
+<ul>
+<li>Roles and statuses are free-text columns with no database check constraint, and the role and status are not validated by an enumeration in the schemas (<code>ReportUpdate.status</code> is <code>Optional[str]</code>), which is the root of F-3.</li>
+<li><code>email</code> is a plain string, not validated as an email address.</li>
+<li><code>UserUpdate</code> has no format pattern for phone or national ID, unlike registration, so profile edits can store malformed values.</li>
+<li>Failed logins are not written to the audit log; successful ones are.</li>
+<li>Many list and detail routes are <code>async</code> functions that call blocking database code; under load this could stall the event loop. This was not measured.</li>
+<li>In <code>delete_report</code>, the audit row is written <em>after</em> the delete is committed, so a failure between the two would leave a deletion with no record.</li>
+</ul>
+<h3>6.4.1 What was not tested</h3>
+<p>No load or performance test; no PostgreSQL-specific test; no penetration test; no test of the WebSocket or live-feed proxy (other member); no test of TLS or deployment configuration; no automated test of the front end.</p>
+<h2>6.5 User Evaluation</h2>
+<p>None carried out. No officers, administrators or members of the public used the backend directly, and no survey or interview data exist.</p>
+<h2>6.6 Analysis of Results</h2>
+<ul>
+<li><strong>The intended behaviour is well covered.</strong> The role matrix, ownership rule, lifecycle, cascade delete and plate normalisation all have passing tests, so the core promises of Chapter 4 hold under test.</li>
+<li><strong>The weaknesses cluster around the token design.</strong> F-1, F-2 and F-7 have one cause: the server trusts the token's contents (<code>role</code>, and the fact that it was issued) and does not re-check the database on each request. That is the stateless trade-off named in §2.2.4. In practice it means a deactivated or demoted police officer keeps their old access until the token expires (24 hours by default). For a police system that is the most important finding.</li>
+<li><strong>F-3 and F-5 are validation gaps</strong>, not access-control failures: the people who can do these things are already trusted (police), but the data can end up in states the rest of the system does not expect.</li>
+<li><strong>F-4 is a consequence of a design choice</strong> (a public endpoint for a camera with no identity). The endpoint cannot alter reports, but anyone who can reach it can flood the alert table and the police dashboard with false alerts for any active plate they know.</li>
+<li><strong>F-6</strong> matters more if passwords are short, as here.</li>
+<li><strong>The tests cannot see PostgreSQL-specific problems</strong>, so passing tests are evidence about logic, not about the deployed database.</li>
+</ul>
+<h2>6.7 Objective-by-Objective Evaluation</h2>
+<table>
+<thead>
+<tr>
+<th>Objective</th>
+<th>Evidence</th>
+<th>Verdict</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>B1 Data model</td>
+<td>Four tables with keys, unique email, cascade; tests create the schema and the cascade test passes. <code>create_all()</code> only, no migrations</td>
+<td><strong>Achieved</strong>, with the migration limitation</td>
+</tr>
+<tr>
+<td>B2 Registration, login, hashing, JWT</td>
+<td>bcrypt hashes; token with <code>sub</code>, <code>role</code>, <code>exp</code>; TC-01 to TC-08 pass</td>
+<td><strong>Achieved</strong>; token revocation and lockout not provided (F-1, F-6, F-7)</td>
+</tr>
+<tr>
+<td>B3 Server-side role enforcement</td>
+<td>Role dependencies on every route; role matrix TC-09 to TC-17 pass</td>
+<td><strong>Achieved</strong> for the token as issued; <strong>weakened</strong> by F-1 and F-2, which let a stale role persist</td>
+</tr>
+<tr>
+<td>B4 Report lifecycle and ownership</td>
+<td>TC-18 to TC-23 pass</td>
+<td><strong>Largely achieved</strong>; status validation missing (F-3) and duplicate check incomplete (F-5)</td>
+</tr>
+<tr>
+<td>B5 Plate-match endpoint</td>
+<td>TC-24 to TC-27 pass</td>
+<td><strong>Achieved</strong>; public and unthrottled (F-4)</td>
+</tr>
+<tr>
+<td>B6 Audit records</td>
+<td>Rows written for the listed actions; TC-29 checks one</td>
+<td><strong>Largely achieved</strong>; failed logins not recorded; only one action is directly tested</td>
+</tr>
+<tr>
+<td>B7 Verification and security review</td>
+<td>31 passing tests; ten findings recorded</td>
+<td><strong>Achieved</strong> for this scope; no penetration test</td>
+</tr>
+</tbody>
+</table>
+<h2>6.8 Individual Results</h2>
+<p>All results in this chapter concern the backend and security component, except TC-30 and TC-31 (analytics), which are shown for completeness and are not claimed. The camera-node tests, the WebSocket and the front end are in the other members' reports.</p>
+<h2>6.9 Chapter Summary</h2>
+<p>All 31 tests pass. Six weaknesses were confirmed by probes and one (F-5) by an existing test, the most serious being that tokens outlive deactivation and demotion. Ten findings in total, including three from configuration and code reading, were recorded and none has been fixed in this project; they are listed as recommendations in Chapter 8.</p><h1>Chapter 7: Discussion</h1>
+<h2>7.1 Introduction</h2>
+<p>This chapter interprets the results of Chapter 6, compares them with related practice, states the contributions, and discusses limitations.</p>
+<h2>7.2 Interpretation of Findings</h2>
+<p><strong>The access-control design works as specified, for the token as issued.</strong> Every protected route rejects a missing token, and the role matrix behaves as designed. Reportees cannot read each other's reports, only administrators can delete, and administrators cannot lock themselves out. This answers research question 1 in the affirmative: role-based access can be enforced consistently on the server, using a signed token that carries the role, without relying on the front end.</p>
+<p><strong>The same design is what limits it.</strong> Research question 2 asked what weaknesses remain. The main one is that the token is trusted for its whole lifetime. A deactivated officer or a demoted administrator keeps working until the token expires, and logging out does not end a session. These are not coding mistakes in the role checks; they follow directly from choosing stateless tokens without a revocation check. The fix is small (look up the user in the database on each request, or keep a token deny-list), but it costs one query per request, which is the trade the design originally avoided.</p>
+<p><strong>Validation is thinner than authorisation.</strong> The role checks are consistent, but free-text <code>status</code> and <code>role</code> columns, a plain-string email field and an unvalidated status update let bad values in from people who are already trusted. This is typical of a first version: access control was designed carefully because it is the headline requirement, and data validation was left to the front end.</p>
+<p><strong>The public camera endpoint is the sharpest design trade-off.</strong> Making <code>check-plate</code> public keeps the camera node simple, and it cannot create or edit reports. But it lets anyone who can reach the server, and who knows or guesses an active plate, generate real-looking alerts on police screens. The risk is bounded by network placement, which the code does not enforce.</p>
+<h2>7.3 Comparison with Existing Work</h2>
+<p>No comparison of measured results with other systems was made, because none of the systems reviewed in Chapter 2 publish comparable security test results for a stolen-vehicle registry. On design, this backend implements a small version of what hosted identity providers and mature frameworks provide (hashing, signed tokens, roles) and lacks what they add (revocation, refresh tokens, multi-factor authentication, rate limiting). That is the expected difference between a student prototype and a hardened service. The OWASP categories used as a checklist line up with the findings: broken access control (F-1, F-2), identification and authentication failures (F-6, F-7), security misconfiguration (F-8, F-9) and insufficient input validation (F-3).</p>
+<h2>7.4 Contributions of the Project</h2>
+<ul>
+<li><strong>Practical:</strong> a working, documented API with role-scoped access, a report lifecycle, an audit trail and a plate-match endpoint that tolerates formatting differences.</li>
+<li><strong>Technical:</strong> an access-control layer expressed once as reusable dependencies; a test set-up that runs the production PostgreSQL query on SQLite and checks the cascade.</li>
+<li><strong>Analytical:</strong> a verified list of what this style of design does <em>not</em> protect against, with a reproducible probe for each.</li>
+</ul>
+<h2>7.5 Limitations and Implications</h2>
+<table>
+<thead>
+<tr>
+<th>Limitation</th>
+<th>Implication</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tests run on SQLite</td>
+<td>Passing tests do not show PostgreSQL behaviour; the constraint and data-type behaviour of the real database was checked only for the cascade fix</td>
+</tr>
+<tr>
+<td>Probes were written by the author of the code</td>
+<td>They test the weaknesses the author thought of. Other weaknesses may exist</td>
+</tr>
+<tr>
+<td>No penetration test or external review</td>
+<td>The findings are a lower bound</td>
+</tr>
+<tr>
+<td>No load testing</td>
+<td>Behaviour under many simultaneous requests, including the <code>async</code>-with-blocking-code concern, is unknown</td>
+</tr>
+<tr>
+<td>Severity ratings are the student's own judgement</td>
+<td>They are not a formal scoring such as CVSS</td>
+</tr>
+<tr>
+<td>Findings not fixed</td>
+<td>The delivered system still contains them (§8.5)</td>
+</tr>
+<tr>
+<td>No stakeholder input</td>
+<td>Requirements may miss needs of real officers</td>
+</tr>
+</tbody>
+</table>
+<h2>7.6 Chapter Summary</h2>
+<p>The backend meets its access-control goals for tokens as issued, and the tests show it. Its weaknesses are concentrated in token lifetime, input validation and the public endpoint, and each was demonstrated or read from the code. They are documented here so they can be fixed, not hidden.</p><h1>Chapter 8: Conclusion and Recommendations</h1>
+<h2>8.1 Introduction</h2>
+<p>This chapter summarises the project, states the conclusions the evidence supports, reviews the objectives, and gives recommendations and future work.</p>
+<h2>8.2 Summary of the Project</h2>
+<p>The group built SVDS so that stolen-vehicle reports filed by the public can be matched automatically against plates seen by a camera. This report covered the backend and security component: a FastAPI service over a four-table PostgreSQL model, with bcrypt password hashing, signed role-carrying tokens, server-side role checks, a report lifecycle, a plate-match endpoint for the camera node, and an audit trail. It was verified by 31 automated tests and by targeted security probes.</p>
+<h2>8.3 Conclusions</h2>
+<ol>
+<li>Server-side role-based access control with a signed token is achievable with a small amount of code and behaves correctly under test.</li>
+<li>Passwords are stored as bcrypt hashes and the reportee, police and admin roles are separated as designed.</li>
+<li>The plate-match endpoint works across case and spacing differences and matches only active reports.</li>
+<li>The design has confirmed weaknesses: tokens outlive deactivation, demotion and logout; report status is not validated; the public camera endpoint can be used to create false alerts; and there is no login throttling.</li>
+<li>The system is a good prototype and is <strong>not</strong> ready for production use with real police data until the recommendations below are addressed.</li>
+</ol>
+<h2>8.4 Achievement of Objectives</h2>
+<table>
+<thead>
+<tr>
+<th>Objective</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>B1 Data model</td>
+<td>Achieved (no migrations)</td>
+</tr>
+<tr>
+<td>B2 Authentication and password storage</td>
+<td>Achieved; revocation and lockout missing</td>
+</tr>
+<tr>
+<td>B3 Server-side role enforcement</td>
+<td>Achieved for tokens as issued; weakened by stale-role tokens</td>
+</tr>
+<tr>
+<td>B4 Report lifecycle and ownership</td>
+<td>Largely achieved; status validation and duplicate check incomplete</td>
+</tr>
+<tr>
+<td>B5 Plate-match endpoint</td>
+<td>Achieved; public and unthrottled</td>
+</tr>
+<tr>
+<td>B6 Audit records</td>
+<td>Largely achieved; failed logins not recorded</td>
+</tr>
+<tr>
+<td>B7 Verification and security review</td>
+<td>Achieved for this scope</td>
+</tr>
+</tbody>
+</table>
+<p>Research question 1: yes. Research question 2: ten weaknesses were found and recorded.</p>
+<h2>8.5 Recommendations</h2>
+<p>In priority order:</p>
+<ol>
+<li><strong>Re-check the user on every request</strong> (or keep a token deny-list) so deactivation, demotion and logout take effect immediately; shorten the token lifetime and add refresh tokens (F-1, F-2, F-7).</li>
+<li><strong>Validate report status</strong> with an enumeration in the schema and a database check constraint, and route status changes through the lifecycle endpoints only (F-3). Do the same for <code>role</code>.</li>
+<li><strong>Protect <code>check-plate</code></strong> with an API key or a private network, and add rate limiting and de-duplication of repeated alerts (F-4).</li>
+<li><strong>Throttle failed logins</strong>, log them in the audit trail, and raise the password minimum with a basic strength check (F-6).</li>
+<li><strong>Fail at start-up if <code>SECRET_KEY</code> is unset</strong> instead of using a default (F-8), and read allowed origins from configuration (F-9).</li>
+<li>Remove the default password from <code>create_admin.py</code>, require <code>ADMIN_PASSWORD</code>, and stop printing it (F-10).</li>
+<li>Extend the duplicate check to <code>under_review</code> reports (F-5).</li>
+<li>Adopt Alembic migrations and run the test suite against PostgreSQL.</li>
+<li>Validate email addresses, and apply the registration formats to profile edits.</li>
+<li>Write the audit row in the same transaction as the action it records.</li>
+</ol>
+<h2>8.6 Future Work</h2>
+<ul>
+<li>Fix the findings above and turn each probe into a permanent regression test.</li>
+<li>Add multi-factor authentication for police and admin accounts.</li>
+<li>Add a structured penetration test and a load test.</li>
+<li>Add pagination totals and stronger search to the report lists.</li>
+<li>Move blocking database calls out of <code>async</code> routes, or use an async database driver.</li>
+<li>Define data retention and access-request rules that meet Zambian data protection requirements.</li>
+</ul><h1>References</h1>
+<ol>
+<li>FastAPI. "FastAPI Documentation." https://fastapi.tiangolo.com (accessed 2026).</li>
+<li>SQLAlchemy. "SQLAlchemy Documentation." https://www.sqlalchemy.org</li>
+<li>PostgreSQL Global Development Group. "PostgreSQL Documentation." https://www.postgresql.org/docs/</li>
+<li>Pydantic. "Pydantic Documentation." https://docs.pydantic.dev</li>
+<li>Jones, M., Bradley, J., Sakimura, N. (2015). JSON Web Token (JWT). RFC 7519, IETF. https://datatracker.ietf.org/doc/html/rfc7519</li>
+<li>Provos, N., Mazieres, D. (1999). A Future-Adaptable Password Scheme. USENIX Annual Technical Conference.</li>
+<li>Passlib. "Passlib Documentation." https://passlib.readthedocs.io</li>
+<li>OWASP Foundation. "OWASP Top 10" and "OWASP API Security Top 10." https://owasp.org</li>
+<li>Ferraiolo, D., Kuhn, D. R. (1992). Role-Based Access Controls. 15th National Computer Security Conference.</li>
+<li>Fielding, R. T. (2000). Architectural Styles and the Design of Network-based Software Architectures. Doctoral dissertation, University of California, Irvine.</li>
+<li>pytest. "pytest Documentation." https://docs.pytest.org</li>
+<li>Sommerville, I. (2011). Software Engineering, 9th ed. Pearson.</li>
+</ol>
+<p><span class="todo">[Add any interviews, Zambia Police Service correspondence, the Zambian data protection legislation you rely on, or supervisor notes, and format all entries to the department's required style.]</span></p><h1>Appendix A: Individual Contribution Statement (Group Projects)</h1>
+<h2>Purpose of this Statement</h2>
+<p>This statement identifies the work for which the student was primarily responsible. It is consistent with the main report. Work by other group members is acknowledged and is not claimed.</p>
+<h2>A.1 Project and Group Information</h2>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Details</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Project Title</td>
+<td>SVDS: A Camera-Based Stolen Vehicle Detection System for the Zambia Police Service (built on the VRRS registry)</td>
+</tr>
+<tr>
+<td>Student Name</td>
+<td>[STUDENT NAME]</td>
+</tr>
+<tr>
+<td>Computer Number</td>
+<td>[COMPUTER NUMBER]</td>
+</tr>
+<tr>
+<td>Supervisor</td>
+<td>[SUPERVISOR NAME]</td>
+</tr>
+<tr>
+<td>Group Size</td>
+<td>4</td>
+</tr>
+<tr>
+<td>Group Members</td>
+<td>1. Moomba Nicholas Katapazi, [COMPUTER NUMBER] (AI/vision)<br/>2. [STUDENT NAME], [COMPUTER NUMBER] (Backend and security)<br/>3. [NAME], [COMPUTER NUMBER] (Real-time and integration)<br/>4. [NAME], [COMPUTER NUMBER] (Frontend, analytics, testing and documentation)</td>
+</tr>
+</tbody>
+</table>
+<h2>A.2 Overall Group Project</h2>
+<p>The group built <strong>SVDS/VRRS</strong>, a system with which the public files stolen-vehicle reports and police officers are alerted automatically when a camera sees a reported vehicle. It has three independently running processes: a FastAPI and PostgreSQL backend, a React frontend with three role-based portals (Reportee, Police, Admin), and a camera node that reads number plates from a phone's video stream using a custom-trained YOLOv8 detector and OCR. The common problem is that stolen-vehicle recovery depends on officers chancing to recognise a plate. The system's core flow is: camera node reads a plate, the backend matches it against active reports, and connected police dashboards receive an alert over WebSocket.</p>
+<h2>A.3 Individual Role and Responsibilities</h2>
+<p>The group's work was divided into four roles. The student's role was <strong>Role 2: Backend and security</strong>, which covers work areas 3 (backend API and database) and 4 (security and access control).</p>
+<table>
+<thead>
+<tr>
+<th>No.</th>
+<th>Area of Responsibility</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>3</td>
+<td>Backend API and database</td>
+<td>FastAPI service and PostgreSQL schema; report CRUD and lifecycle; the <code>/alerts/check-plate</code> matching endpoint</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Security and access control</td>
+<td>JWT login, bcrypt password hashing, Reportee/Police/Admin roles and middleware, user management, audit records</td>
+</tr>
+</tbody>
+</table>
+<p>Other roles, for reference: <strong>Role 1</strong> the plate-detection model and camera node; <strong>Role 3</strong> WebSocket alerts, camera status and live-feed proxy, system health, and the phone-to-server wiring; <strong>Role 4</strong> the React portals, analytics, integration tests, run scripts and documentation.</p>
+<h2>A.4 Detailed Individual Contribution</h2>
+<ul>
+<li><strong>Data design:</strong> designed the four-table schema (users, reports, alerts, audit log), keys, unique email and the cascade from reports to alerts.</li>
+<li><strong>Software development:</strong> wrote the FastAPI application structure, database session handling, ORM models and Pydantic schemas with telephone and national ID formats.</li>
+<li><strong>Security:</strong> implemented bcrypt password storage, JWT issue and checking, and the <code>require_role</code> dependencies; implemented ownership rules on reports and the admin safeguards on user management.</li>
+<li><strong>Business logic:</strong> implemented the report lifecycle (<code>under_review</code> to <code>missing</code> to <code>found</code>), the duplicate-active-report rule, and the plate-match endpoint with case and spacing normalisation.</li>
+<li><strong>Auditing:</strong> added audit records to state-changing actions.</li>
+<li><strong>Defect fixing:</strong> fixed the report-delete cascade defect.</li>
+<li><strong>Testing and security review:</strong> ran the 31-test suite, wrote and ran the security probes, and recorded ten findings with recommendations.</li>
+<li><strong>Documentation:</strong> this report, including the API and role tables.</li>
+</ul>
+<h2>A.5 Individual Deliverables</h2>
+<table>
+<thead>
+<tr>
+<th>No.</th>
+<th>Deliverable</th>
+<th>Student's Contribution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Database schema and ORM models (<code>models.py</code>, <code>database.py</code>)</td>
+<td>Designed and implemented</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Authentication and access control (<code>auth.py</code>, <code>middleware.py</code>, <code>routers/auth.py</code>, <code>routers/users.py</code>)</td>
+<td>Designed and implemented</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Report lifecycle and plate-match endpoint (<code>routers/reports.py</code>, <code>check-plate</code> in <code>routers/alerts.py</code>)</td>
+<td>Designed and implemented</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Request and response schemas (<code>schemas.py</code>)</td>
+<td>Designed and implemented</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Security review: probe results and findings F-1 to F-10</td>
+<td>Carried out and documented</td>
+</tr>
+</tbody>
+</table>
+<h2>A.6 Contribution to the Main System or Research Output</h2>
+<p>The student produced the server that stores and protects the system's data and answers the camera's question "is this plate stolen?". The camera node itself was built by the AI/vision member; the WebSocket delivery, camera status and live-feed proxy by the real-time and integration member; the web pages and analytics by the frontend member. The <code>check-plate</code> request and response format was agreed with the AI/vision member. The WebSocket manager lives in the same file as <code>check-plate</code> (<code>routers/alerts.py</code>) and was written by the real-time member.</p>
+<h2>A.7 Individual Implementation and Technical Work</h2>
+<p>Modules implemented by the student: <code>main.py</code>, <code>database.py</code>, <code>models.py</code>, <code>schemas.py</code>, <code>auth.py</code>, <code>middleware.py</code>, <code>routers/auth.py</code>, <code>routers/users.py</code>, <code>routers/reports.py</code>, and the <code>check-plate</code> and alert-listing routes in <code>routers/alerts.py</code>. Databases and integrations: PostgreSQL schema, the camera-node contract, and the hook that calls the real-time broadcast.</p>
+<h2>A.8 Individual Testing and Evaluation Contribution</h2>
+<p>The student ran the 31-test backend suite, wrote and ran the security probe tests, interpreted the results, and wrote Chapters 6 and 7. <strong>Authorship of each file in <code>vrrs-backend/tests/</code> should be confirmed by the student</strong>: the group's role split placed "tests" with the frontend member, so this report does not claim the suite as the student's own work. The camera-node tests and the manual browser checks belong to other members.</p>
+<h2>A.9 Collaboration with Other Group Members</h2>
+<ul>
+<li>The <strong>AI/vision member's</strong> camera node calls <code>POST /alerts/check-plate</code>; its request and response format was agreed jointly.</li>
+<li>The <strong>real-time and integration member's</strong> WebSocket manager is called by <code>check-plate</code> and reuses <code>decode_token</code>; the WebSocket admits only police and admin tokens.</li>
+<li>The <strong>frontend member's</strong> pages call every route in Chapter 4 and depend on the role and redirect returned at login.</li>
+</ul>
+<h2>A.10 Contribution Summary</h2>
+<ol>
+<li><strong>Work primarily completed by the student:</strong> the data model, authentication and access control, the report lifecycle, the plate-match endpoint, audit records and the security review.</li>
+<li><strong>Work completed jointly with other members:</strong> the camera-node contract; the alert broadcast hook; start-up through <code>run-all.ps1</code>.</li>
+<li><strong>Work primarily completed by other members and used here:</strong> the detection model and camera node; the WebSocket delivery, camera status and health endpoints; the web portals and analytics.</li>
+</ol>
+<h2>A.11 Estimated Contribution</h2>
+<p><em>The percentages below are the student's own estimate and must be completed by the student. They were not derived from any record.</em></p>
+<table>
+<thead>
+<tr>
+<th>Project Activity</th>
+<th>Individual Contribution</th>
+<th>Collaborative Contribution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Problem Analysis</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+<tr>
+<td>Literature Review</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+<tr>
+<td>Requirements Analysis</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+<tr>
+<td>System/Research Design</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+<tr>
+<td>Implementation / Development</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+<tr>
+<td>Testing and Evaluation</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+<tr>
+<td>Documentation</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+<tr>
+<td>Other</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+</tbody>
+</table>
+<h2>A.12 Statement of Authorship and Contribution</h2>
+<p>I confirm that the contribution described in this statement accurately represents the work that I personally undertook as part of the group project. I have identified collaborative work and have not knowingly claimed the work of another group member as my own.</p>
+<p><strong>Student Name:</strong> [STUDENT NAME]
+<strong>Computer Number:</strong> <strong><em>_</em></strong><strong><em>_</em></strong><strong><em>_</em></strong><em>
+<strong>Signature:</strong> <strong><em>_</em></strong><strong><em>_</em></strong><strong><em>_</em></strong></em>
+<strong>Date:</strong> <strong><em>_</em></strong><strong><em>_</em></strong><strong><em>_</em></strong>_</p>
+<h2>A.13 Supervisor Verification</h2>
+<p>I confirm that, to the best of my knowledge, the contribution described above is consistent with the student's participation in the group project.</p>
+<p><strong>Supervisor Name:</strong> <strong><em>_</em></strong><strong><em>_</em></strong><strong><em>_</em></strong><em>
+<strong>Signature:</strong> <strong><em>_</em></strong><strong><em>_</em></strong><strong><em>_</em></strong></em>
+<strong>Date:</strong> <strong><em>_</em></strong><strong><em>_</em></strong><strong><em>_</em></strong>_</p><h1>Appendix B: User Manual / Installation Guide</h1>
+<p>This guide covers the backend. The camera node and front end are documented in the other members' reports and the project <code>README.md</code>.</p>
+<h2>B.1 Requirements</h2>
+<ul>
+<li>Python 3.12 or later, and PostgreSQL with an empty database (for example <code>vrrs_db</code>).</li>
+<li>The packages in <code>vrrs-backend/requirements.txt</code>.</li>
+</ul>
+<h2>B.2 Install and configure</h2>
+<pre><code class="language-bash">cd vrrs-backend
+pip install -r requirements.txt
+cp .env.example .env
+</code></pre>
+<p>Edit <code>.env</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Meaning</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>DATABASE_URL</code></td>
+<td>PostgreSQL connection string</td>
+<td>e.g. <code>postgresql://postgres:&lt;password&gt;@localhost:5432/vrrs_db</code></td>
+</tr>
+<tr>
+<td><code>SECRET_KEY</code></td>
+<td>Token signing key</td>
+<td><strong>Must be a long random value.</strong> The code falls back to <code>changeme</code> if it is missing (finding F-8)</td>
+</tr>
+<tr>
+<td><code>ALGORITHM</code></td>
+<td>JWT algorithm</td>
+<td><code>HS256</code></td>
+</tr>
+<tr>
+<td><code>TOKEN_EXPIRY_HOURS</code></td>
+<td>Token lifetime</td>
+<td>24 by default</td>
+</tr>
+<tr>
+<td><code>CORS_ORIGINS</code></td>
+<td>Listed in the template but <strong>not read by the code</strong>; allowed origins are hard-coded in <code>main.py</code> (finding F-9)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2>B.3 Run</h2>
+<pre><code class="language-bash">uvicorn app.main:app --reload
+</code></pre>
+<p>The API runs at <code>http://localhost:8000</code>. Interactive documentation is at <code>/docs</code>. Tables are created automatically at start-up if they do not exist.</p>
+<p>Public registration creates reportees only, so the first administrator is created with the helper script <code>create_admin.py</code>:</p>
+<pre><code class="language-bash">set ADMIN_EMAIL=admin@example.local
+set ADMIN_PASSWORD=&lt;choose a strong password&gt;
+python create_admin.py
+</code></pre>
+<p><strong>Always set <code>ADMIN_PASSWORD</code> yourself.</strong> If it is unset the script uses a default password that is written in its source (finding F-10). The script also defaults to a local SQLite file when <code>DATABASE_URL</code> is not set, so set that too. Later role changes are made by an administrator, and a promoted account must have a badge number.</p>
+<h2>B.4 Roles at a glance</h2>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Can do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Reportee</td>
+<td>Register, log in, file reports, see own reports, edit own profile</td>
+</tr>
+<tr>
+<td>Police</td>
+<td>Everything a reportee can, plus see all reports and users, activate and mark reports found, edit reports, view and flag alerts, view analytics</td>
+</tr>
+<tr>
+<td>Admin</td>
+<td>Everything police can, plus create police accounts, change roles, deactivate or delete users, delete reports, read the audit log</td>
+</tr>
+</tbody>
+</table>
+<h2>B.5 Troubleshooting</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Likely cause</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>401 Invalid or expired token</code></td>
+<td>Missing, expired or wrongly signed token</td>
+<td>Log in again; check <code>SECRET_KEY</code> has not changed since the token was issued</td>
+</tr>
+<tr>
+<td><code>403 Access denied</code></td>
+<td>Role too low for the route</td>
+<td>Use an account with the required role</td>
+</tr>
+<tr>
+<td><code>409</code> when filing a report</td>
+<td>A <code>missing</code> report for that plate exists</td>
+<td>Check the existing report</td>
+</tr>
+<tr>
+<td>Start-up prints "error creating DB schema"</td>
+<td>Cannot reach PostgreSQL</td>
+<td>Check <code>DATABASE_URL</code> and that PostgreSQL is running</td>
+</tr>
+<tr>
+<td>Frontend blocked by CORS</td>
+<td>Its origin is not in the hard-coded list</td>
+<td>Add the origin in <code>main.py</code></td>
+</tr>
+<tr>
+<td>Deleting a report fails on an older database</td>
+<td>The cascade constraint was created before the fix</td>
+<td>Alter the <code>alerts.report_id</code> foreign key to <code>ON DELETE CASCADE</code> by hand</td>
+</tr>
+</tbody>
+</table>
+<h2>B.6 Run the tests</h2>
+<pre><code class="language-bash">cd vrrs-backend
+python -m pytest tests/ -v
+</code></pre>
+<p>The tests use an in-memory SQLite database and do not touch PostgreSQL.</p>
+<hr />
+<h1>Appendix C: Additional System Designs / Diagrams</h1>
+<h2>C.1 Authentication sequence</h2>
+<p><img alt="Figure C.1: authentication sequence" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/04-system-design-3.png" /></p>
+<h2>C.2 Role-based route access</h2>
+<p><img alt="Figure C.2: role-based route access" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/04-system-design-5.png" /></p>
+<h2>C.3 Database schema</h2>
+<p><img alt="Figure C.3: entity-relationship diagram" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/04-system-design-2.png" /></p>
+<h2>C.4 Detection-to-alert sequence</h2>
+<p><img alt="Figure C.4: detection-to-alert sequence" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/04-system-design-4.png" /></p>
+<hr />
+<h1>Appendix D: Additional Test Cases and Results</h1>
+<h2>D.1 Raw test output</h2>
+<p>The full captured output of the 31 passing tests is in <code>thesis/assets/test-results/backend-pytest-output.txt</code>. The suite was re-run while preparing this report and again passed (31 passed).</p>
+<h2>D.2 Probe results (raw)</h2>
+<p>The probe tests were temporary and were deleted after running; their printed output is reproduced below.</p>
+<pre><code>PROBE deactivated-user token /users/me            -&gt; 200
+PROBE demoted-admin old token /system/audit       -&gt; 200
+PROBE PATCH status=banana                         -&gt; 200 banana
+PROBE check-plate no-auth x3                      -&gt; ['STOLEN','STOLEN','STOLEN']  alerts rows: 3
+PROBE 20 wrong logins status set                  -&gt; {401}
+PROBE register password 'abcdef'                  -&gt; 422   (invalid probe: payload incomplete)
+PROBE default-key forged token accepted           -&gt; False
+PROBE SECRET_KEY equals 'changeme'                -&gt; False | length 47
+PROBE token after /auth/logout                    -&gt; 200
+</code></pre>
+<h2>D.3 One probe as an example</h2>
+<pre><code class="language-python">def test_probe_deactivated_token_still_works(client, make_user, auth_headers, db_session):
+    u = make_user(role=&quot;reportee&quot;); h = auth_headers(u)
+    u.is_active = False; db_session.commit()
+    print(client.get(&quot;/users/me&quot;, headers=h).status_code)          # observed: 200
+    assert client.post(&quot;/auth/login&quot;,
+        json={&quot;email&quot;: u.email, &quot;password&quot;: &quot;Password123&quot;}).status_code == 403
+</code></pre>
+<hr />
+<h1>Appendix E: Data Collection Instruments</h1>
+<p>Not applicable. No questionnaires, interviews or surveys were used.</p>
+<hr />
+<h1>Appendix F: Additional Code / Configuration</h1>
+<h2>F.1 Role dependencies (<code>app/middleware.py</code>)</h2>
+<pre><code class="language-python">def get_current_user(token: str = Depends(oauth2_scheme)):
+    payload = decode_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail=&quot;Invalid or expired token.&quot;,
+                            headers={&quot;WWW-Authenticate&quot;: &quot;Bearer&quot;})
+    return {&quot;id&quot;: int(payload[&quot;sub&quot;]), &quot;role&quot;: payload[&quot;role&quot;]}
+
+def require_role(*roles):
+    def checker(user: dict = Depends(get_current_user)):
+        if user[&quot;role&quot;] not in roles:
+            raise HTTPException(status_code=403,
+                detail=f&quot;Access denied. Required roles: {list(roles)}&quot;)
+        return user
+    return checker
+</code></pre>
+<h2>F.2 Where finding F-1 and F-2 come from</h2>
+<p><code>get_current_user</code> returns the role from the token and never reads the database, so a changed role or a deactivated account is not seen until the token expires. A fix would look up <code>User</code> by id here and reject inactive users.</p>
+<h2>F.3 Environment template (<code>.env.example</code>)</h2>
+<pre><code>DATABASE_URL=postgresql://postgres:yourpassword@localhost:5432/vrrs_db
+SECRET_KEY=your-super-secret-key-change-this-in-production
+ALGORITHM=HS256
+TOKEN_EXPIRY_HOURS=24
+CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+</code></pre>
+<hr />
+<h1>Appendix G: Other Supporting Material</h1>
+<h2>G.1 Group role split</h2>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Work areas</th>
+<th>Focus</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1. AI/vision</td>
+<td>Detection model; camera node</td>
+<td>YOLOv8n detector, OCR pipeline</td>
+</tr>
+<tr>
+<td>2. Backend and security</td>
+<td>Backend API and database; security and access control</td>
+<td><strong>This report</strong></td>
+</tr>
+<tr>
+<td>3. Real-time and integration</td>
+<td>Real-time alerts and monitoring; phone-to-server wiring</td>
+<td>WebSocket, camera status, feed proxy, health</td>
+</tr>
+<tr>
+<td>4. Frontend</td>
+<td>Frontend portals; analytics, testing and documentation</td>
+<td>React pages, analytics, run scripts</td>
+</tr>
+</tbody>
+</table>
+<h2>G.2 Findings summary</h2>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Finding</th>
+<th>Severity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F-1</td>
+<td>Token valid after deactivation</td>
+<td>High</td>
+</tr>
+<tr>
+<td>F-2</td>
+<td>Token keeps old role after demotion</td>
+<td>High</td>
+</tr>
+<tr>
+<td>F-3</td>
+<td>Report status accepts any value</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>F-4</td>
+<td>Public <code>check-plate</code> creates repeat alerts</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>F-5</td>
+<td>Duplicate check ignores <code>under_review</code></td>
+<td>Low</td>
+</tr>
+<tr>
+<td>F-6</td>
+<td>No limit on failed logins</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>F-7</td>
+<td>Logout does not invalidate token</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>F-8</td>
+<td>Default signing key fallback (latent)</td>
+<td>Latent</td>
+</tr>
+<tr>
+<td>F-9</td>
+<td><code>CORS_ORIGINS</code> setting unused</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>F-10</td>
+<td><code>create_admin.py</code> default password in source</td>
+<td>Medium</td>
+</tr>
+</tbody>
+</table>
+</body></html>

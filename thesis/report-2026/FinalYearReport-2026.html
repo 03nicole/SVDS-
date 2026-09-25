@@ -1,0 +1,1786 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>Final Year Project Report 2026</title>
+<style>
+  @page { size: A4; margin: 2.5cm; }
+  body { font-family: 'Times New Roman', serif; font-size: 12pt; line-height: 1.5; color: #000; max-width: 210mm; margin: 0 auto; }
+  h1 { font-size: 20pt; text-align: center; page-break-before: always; margin-top: 0; }
+  h2 { font-size: 15pt; margin-top: 1.4em; }
+  h3 { font-size: 13pt; margin-top: 1.1em; }
+  p, li { text-align: justify; }
+  code { font-family: Consolas, 'Courier New', monospace; font-size: 10pt; }
+  pre { background: #f5f5f5; border: 1px solid #ddd; padding: 8px; font-size: 9pt; white-space: pre-wrap; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 10.5pt; }
+  th, td { border-top: 1px solid #444; border-bottom: 1px solid #444; padding: 4px 8px; text-align: left; vertical-align: top; }
+  th { background: #efefef; }
+  img { max-width: 100%; display: block; margin: 0.8em auto; }
+  .cover { text-align: center; page-break-after: always; }
+  .cover h2, .cover h3 { text-align: center; }
+  .plain-title { font-size: 20pt; font-weight: bold; text-align: center; page-break-before: always; margin: 1em 0; }
+  .sig { margin: 1.4em 0; } .sig span { display: inline-block; border-bottom: 1px solid #000; width: 60%; }
+  .center { text-align: center; }
+  .todo { background: #fff3b0; }
+</style>
+</head><body>
+
+<div class="cover">
+<h3>THE UNIVERSITY OF ZAMBIA</h3>
+<h3>SCHOOL OF NATURAL AND APPLIED SCIENCES</h3>
+<h3>DEPARTMENT OF COMPUTING AND INFORMATICS</h3>
+<br/><br/>
+<h2>FINAL YEAR PROJECT REPORT</h2>
+<h3>ACADEMIC YEAR 2026</h3>
+<br/><br/>
+<h1 style="page-break-before:avoid">SVDS: A Camera-Based Stolen Vehicle Detection System for the Zambia Police Service &mdash; The AI/Vision Component (Plate Detection Model and Camera Node)</h1>
+<br/>
+<p class="center">A Final Year Project Report Submitted to the<br/>Department of Computing and Informatics<br/>in partial fulfilment of the requirements for the award of</p>
+<p class="center"><b>[DEGREE PROGRAMME &mdash; confirm]</b></p>
+<br/><br/>
+<p class="center"><b>Student Name:</b> Moomba Nicholas Katapazi<br/>
+<b>Computer Number:</b> [COMPUTER NUMBER]<br/>
+<b>Supervisor:</b> [SUPERVISOR NAME]<br/>
+<b>Date of Submission:</b> [DATE OF SUBMISSION]</p>
+</div>
+
+<div class="plain-title">DECLARATION</div>
+<p>I declare that this final year project report is my own work and has been prepared in accordance with the academic requirements of the University of Zambia. All sources of information, ideas, data, software, images, and other material that are not my own have been appropriately acknowledged and referenced.</p>
+<p>Where this project was undertaken as part of a group, I have clearly identified my individual contributions and have not presented the work of other group members as my own.</p>
+<p class="sig"><b>Student Name:</b> Moomba Nicholas Katapazi</p>
+<p class="sig"><b>Computer Number:</b> <span>&nbsp;</span></p><p class="sig"><b>Signature:</b> <span>&nbsp;</span></p><p class="sig"><b>Date:</b> <span>&nbsp;</span></p>
+
+<div class="plain-title">APPROVAL</div>
+<p>This final year project report has been submitted for examination with the approval of the project supervisor.</p>
+<p class="sig"><b>Supervisor Name:</b> <span>&nbsp;</span></p><p class="sig"><b>Signature:</b> <span>&nbsp;</span></p><p class="sig"><b>Date:</b> <span>&nbsp;</span></p><p class="sig"><b>Departmental/Examiner Approval (if applicable):</b> <span>&nbsp;</span></p>
+<div class="plain-title">ABSTRACT</div>
+
+<p>Stolen-vehicle recovery in Zambia depends largely on police officers chancing to recognise a plate number from a paper report or radio bulletin. This project, carried out by a group of four students, built SVDS, a Stolen Vehicle Detection System on top of the VRRS vehicle registry. The public files stolen-vehicle reports through a web application, and a camera node reads plates from a phone's video stream and checks them against active reports, so connected police officers are alerted in real time.</p>
+<p>This individual report covers the AI/vision component: the plate-detection model and the camera node. A single-class YOLOv8n detector was fine-tuned on a Roboflow-annotated dataset of 1,890 labelled images (1,476 training, 407 validation, 7 test) of Zambian number plates. Detected plates are cropped, converted to greyscale, upscaled and thresholded, and read with EasyOCR restricted to letters and digits. The text is validated as 5–8 alphanumeric characters and then de-duplicated by fuzzy string similarity, because OCR noise defeats exact-match cooldowns. Each accepted reading is sent to the backend over a single HTTP endpoint, so the node runs as a decoupled process.</p>
+<p>After 100 training epochs the model reached a precision of 0.988, a recall of 0.751, an mAP50 of 0.801 and an mAP50-95 of 0.686 on the validation split. The eight unit tests for the node's plate-cleaning and de-duplication logic all pass. A live run of the node read plates from a phone stream and reached the backend, but reading accuracy (OCR), alert latency and a recorded stolen-vehicle alert were not measured, and the report states these limitations plainly. The main contributions are a locally trained plate detector, a noise-tolerant read-and-report pipeline, and a decoupled camera-node design that could be moved to fixed roadside cameras without changing the backend.</p>
+<p><strong>Keywords:</strong> licence plate recognition; YOLOv8; object detection; optical character recognition; stolen vehicle detection</p>
+<div class="plain-title">ACKNOWLEDGEMENTS</div>
+
+<p><span class="todo">[Write acknowledgements here: supervisor, group members (backend and security, real-time and integration, frontend), family, and anyone who helped collect plate images. The author must write this; it is personal.]</span></p>
+<div class="plain-title">CONTENTS</div>
+
+<p><strong>Preliminary pages:</strong> Declaration · Approval · Abstract · Acknowledgements · List of Abbreviations and Acronyms · Note on Group Projects</p>
+<p><strong>1 Introduction</strong> — 1.1 Background and Context · 1.2 Problem Statement · 1.3 Project Aim · 1.4 Project Objectives · 1.5 Research Questions · 1.6 Scope of the Project (In Scope, Out of Scope) · 1.7 Significance · 1.8 Limitations · 1.9 Organisation of the Report</p>
+<p><strong>2 Literature Review</strong> — 2.1 Introduction · 2.2 Key Concepts and Theories · 2.3 Existing Systems / Related Work · 2.4 Comparative Analysis · 2.5 Research / Knowledge Gap · 2.6 Conceptual Framework · 2.7 Chapter Summary</p>
+<p><strong>3 Methodology</strong> — 3.1 Introduction · 3.2 Research / Development Approach · 3.3 Requirements / Data Collection · 3.4 System Architecture / Research Workflow · 3.5 Tools and Technologies · 3.6 Ethical and Legal Considerations · 3.7 Evaluation Method · 3.8 Chapter Summary</p>
+<p><strong>4 System Analysis and Design</strong> — 4.1 Introduction · 4.2 Stakeholder and User Analysis · 4.3 Functional Requirements · 4.4 Non-Functional Requirements · 4.5 Use Cases / User Stories · 4.6 System / Solution Architecture · 4.7 Database / Data Design · 4.8 Interface / Interaction Design · 4.9 Algorithms / Models / Technical Design · 4.10 Chapter Summary</p>
+<p><strong>5 Implementation / Development</strong> — 5.1 Introduction · 5.2 Development Environment · 5.3 System Components / Modules · 5.4 Key Implementation Details · 5.5 Integration · 5.6 Challenges and Solutions · 5.7 Individual Contribution · 5.8 Chapter Summary</p>
+<p><strong>6 Testing, Results and Evaluation</strong> — 6.1 Introduction · 6.2 Testing Strategy · 6.3 Test Cases and Results · 6.4 Experimental / Performance Results · 6.5 User Evaluation · 6.6 Analysis of Results · 6.7 Objective-by-Objective Evaluation · 6.8 Individual Results · 6.9 Chapter Summary</p>
+<p><strong>7 Discussion</strong> — 7.1 Introduction · 7.2 Interpretation of Findings · 7.3 Comparison with Existing Work · 7.4 Contributions of the Project · 7.5 Limitations and Implications · 7.6 Chapter Summary</p>
+<p><strong>8 Conclusion and Recommendations</strong> — 8.1 Introduction · 8.2 Summary of the Project · 8.3 Conclusions · 8.4 Achievement of Objectives · 8.5 Recommendations · 8.6 Future Work</p>
+<p><strong>References</strong></p>
+<p><strong>Appendices</strong> — A Individual Contribution Statement · B User Manual / Installation Guide · C Additional System Designs / Diagrams · D Additional Test Cases and Results · E Data Collection Instruments · F Additional Code / Configuration · G Other Supporting Material</p>
+<p><span class="todo">[Page numbers are not shown here. In Word, apply heading styles and use References → Table of Contents to generate a numbered contents page, and a List of Figures and List of Tables the same way.]</span></p>
+<div class="plain-title">LIST OF ABBREVIATIONS AND ACRONYMS</div>
+
+<table>
+<thead>
+<tr>
+<th>Abbreviation</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ALPR</td>
+<td>Automatic Licence Plate Recognition</td>
+</tr>
+<tr>
+<td>API</td>
+<td>Application Programming Interface</td>
+</tr>
+<tr>
+<td>CUDA</td>
+<td>Compute Unified Device Architecture (NVIDIA GPU computing platform)</td>
+</tr>
+<tr>
+<td>DBMS</td>
+<td>Database Management System</td>
+</tr>
+<tr>
+<td>GPU</td>
+<td>Graphics Processing Unit</td>
+</tr>
+<tr>
+<td>HTTP</td>
+<td>Hypertext Transfer Protocol</td>
+</tr>
+<tr>
+<td>IoU</td>
+<td>Intersection over Union</td>
+</tr>
+<tr>
+<td>JWT</td>
+<td>JSON Web Token</td>
+</tr>
+<tr>
+<td>mAP</td>
+<td>mean Average Precision</td>
+</tr>
+<tr>
+<td>MJPEG</td>
+<td>Motion JPEG (video stream format)</td>
+</tr>
+<tr>
+<td>ML</td>
+<td>Machine Learning</td>
+</tr>
+<tr>
+<td>OCR</td>
+<td>Optical Character Recognition</td>
+</tr>
+<tr>
+<td>SVDS</td>
+<td>Stolen Vehicle Detection System</td>
+</tr>
+<tr>
+<td>UI</td>
+<td>User Interface</td>
+</tr>
+<tr>
+<td>VRRS</td>
+<td>Vehicle Registry and Reporting System</td>
+</tr>
+<tr>
+<td>YOLO</td>
+<td>You Only Look Once (object detector family)</td>
+</tr>
+</tbody>
+</table>
+<div class="plain-title">NOTE ON GROUP PROJECTS</div>
+
+<p>Students who worked on a project as a group are strongly encouraged to prepare their own individual final reports rather than submitting identical reports. The project, system, dataset, or overall research problem may be shared, but each student's report should clearly demonstrate that student's own understanding, responsibilities, work, results, and contribution to the project.</p>
+<p>In particular, group-project students should:</p>
+<ul>
+<li>state the overall group project and explain how the individual work fits within it;</li>
+<li>clearly identify their own responsibilities and deliverables;</li>
+<li>focus detailed analysis, design, implementation, experiments, testing, and/or evaluation on their own contribution;</li>
+<li>acknowledge the work completed by other group members where it is discussed;</li>
+<li>include an <em>Individual Contribution Statement</em> in the appendices; and</li>
+<li>not claim another group member's work, results, code, data collection, or design decisions as their own.</li>
+</ul><h1>Chapter 1: Introduction</h1>
+<h2>1.1 Background and Context</h2>
+<p>Vehicle theft is a persistent problem for law enforcement in Zambia. Recovering a stolen vehicle depends heavily on chance: an officer at a checkpoint or on patrol happens to recognise a plate number from a paper report or a radio bulletin. Vehicle records, incident reports and eyewitness descriptions are typically kept on paper or in disconnected station-level spreadsheets. A report filed at one police station is therefore invisible to an officer working in a different part of the same city, let alone a different province.</p>
+<p>At the same time, automatic licence plate recognition (ALPR) has become cheap enough to build from commodity hardware. A single Android phone can stream video over Wi-Fi, and open-source object detectors such as Ultralytics YOLOv8 can be trained on a modest, self-collected image set and run in real time on a consumer GPU. This closes the gap between "a report exists somewhere" and "a report is automatically checked against every vehicle a camera sees".</p>
+<p>This report describes <strong>SVDS</strong>, the Stolen Vehicle Detection System, built as a group project on top of the <strong>VRRS</strong> (Vehicle Registry and Reporting System) web application. The group built one system with four areas of responsibility (see the Note on Group Projects and Appendix A). This report is the individual report of the student responsible for the <strong>AI/vision component</strong>: the plate-detection model and the camera node that turns a live video stream into plate readings.</p>
+<h2>1.2 Problem Statement</h2>
+<p>The Zambia Police Service has no system that automatically checks the licence plate of a vehicle, as seen by a camera in the field, against an active stolen-vehicle registry in real time. Existing practice depends on manual recognition by officers and manual cross-referencing of paper reports. The consequences are:</p>
+<ol>
+<li>slow or missed detection of stolen vehicles that pass through monitored locations;</li>
+<li>no centralised, real-time route by which a report filed by the public reaches every officer who might encounter the vehicle; and</li>
+<li>no audit trail linking a detection event back to the report that triggered it.</li>
+</ol>
+<p>The specific problem addressed by this individual report is the first link in that chain: <strong>reliably turning a phone-camera video stream of Zambian number plates into clean plate strings that the rest of the system can match against the registry</strong>, using only inexpensive hardware and no paid recognition service.</p>
+<h2>1.3 Project Aim</h2>
+<p><strong>Group aim.</strong> To design, implement and evaluate SVDS: a vehicle registry and reporting web application integrated with a real-time, camera-based licence plate detection pipeline, for use by the Zambia Police Service and the public it serves.</p>
+<p><strong>Individual aim (AI/vision).</strong> To build and evaluate the detection model and camera-node pipeline that detects Zambian licence plates in a live video stream, reads them, and reports them to the SVDS backend.</p>
+<h2>1.4 Project Objectives</h2>
+<h3>Group objectives</h3>
+<ol>
+<li>Implement role-based accounts (Reportee, Police, Admin) with access scoped to each role.</li>
+<li>Let the public file and track stolen-vehicle reports (<code>under_review</code> → <code>missing</code> → <code>found</code>).</li>
+<li>Give police officers a live view of detection alerts, the registry and analytics.</li>
+<li>Give administrators control of accounts, system health and the audit trail.</li>
+<li>Detect and read plates from a live camera feed and match them against active reports.</li>
+<li>Deliver an alert to connected police clients over WebSocket the moment a stolen vehicle is detected.</li>
+</ol>
+<h3>Individual objectives (AI/vision)</h3>
+<table>
+<thead>
+<tr>
+<th>No.</th>
+<th>Objective</th>
+<th>Measure of success</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>O1</td>
+<td>Collect and annotate a dataset of Zambian licence plates</td>
+<td>A YOLO-format dataset with train, validation and test splits</td>
+</tr>
+<tr>
+<td>O2</td>
+<td>Train a single-class YOLOv8 plate detector</td>
+<td>Precision above 0.95 and mAP50 above 0.75 on the validation split</td>
+</tr>
+<tr>
+<td>O3</td>
+<td>Read the plate text from each detected region using OCR and validate its format</td>
+<td>Output limited to 5–8 alphanumeric characters; malformed reads discarded</td>
+</tr>
+<tr>
+<td>O4</td>
+<td>Suppress repeated reports of the same plate despite OCR noise</td>
+<td>Near-identical readings inside a cooldown window produce one report</td>
+</tr>
+<tr>
+<td>O5</td>
+<td>Build a decoupled camera node that streams frames, runs O2–O4 and reports to the backend over HTTP</td>
+<td>Node runs as its own process and recovers from stream loss</td>
+</tr>
+<tr>
+<td>O6</td>
+<td>Evaluate the model and node quantitatively and through automated tests</td>
+<td>Precision, recall and mAP reported; unit tests pass</td>
+</tr>
+</tbody>
+</table>
+<h2>1.5 Research Questions</h2>
+<ol>
+<li>Can a custom-trained, lightweight detector (YOLOv8n) combined with an open-source OCR engine detect and read Zambian number plates well enough for real-time matching, using only a phone camera and a consumer GPU?</li>
+<li>Can that pipeline be integrated into a role-based registry as a fully decoupled component that talks to the backend only over plain HTTP?</li>
+</ol>
+<p>(A third question, about the latency benefit of WebSocket alerts, belongs to the real-time and integration member's report and is not answered here.)</p>
+<h2>1.6 Scope of the Project</h2>
+<h3>1.6.1 In Scope</h3>
+<ul>
+<li><strong>Group:</strong> the VRRS/SVDS web application (backend, database, frontend), the camera node, and the integration between them.</li>
+<li><strong>This report:</strong> dataset collection and annotation, detector training and evaluation, the OCR and post-processing pipeline, the fuzzy duplicate-suppression logic, the camera-node process (<code>vrrs-node</code>), and the unit tests for the node's pure logic.</li>
+</ul>
+<h3>1.6.2 Out of Scope</h3>
+<ul>
+<li>A native mobile app for the public (the public interface is a responsive web app).</li>
+<li>Payment or e-government integration.</li>
+<li>Fleet management of many camera nodes (one configured node is supported).</li>
+<li>GPS-based camera geolocation: the camera's location is a configured string.</li>
+<li>Recognition of plate formats other than the Zambian plates in the training set, and recognition of vehicle make, model or colour.</li>
+</ul>
+<h2>1.7 Significance of the Project</h2>
+<p>The project benefits the Zambia Police Service, which gains a way to check every plate a camera sees against the stolen-vehicle registry without an officer having to recognise it, and the public, whose reports become actionable immediately. Technically, it shows that a useful ALPR pipeline can be built from a phone, a consumer GPU and open-source software, with a model trained on locally collected data instead of a paid API. Because the camera node talks to the backend only over HTTP, the same pipeline could later be pointed at fixed roadside cameras without changing the backend.</p>
+<h2>1.8 Limitations</h2>
+<ul>
+<li><strong>Dataset size and provenance.</strong> The dataset is small and comes from a single annotation project. The Roboflow export README states "335 images", while the exported splits on disk contain 1,890 images (§3.3). The number of original source photographs is therefore not established by the records available and must be confirmed before submission.</li>
+<li><strong>No recorded <code>STOLEN</code> alert.</strong> A live run of the node against the phone stream exists (eight readings, all answered <code>CLEAR</code>), but no run in which a real vehicle matched an active report and raised a dashboard alert was recorded (§6.4).</li>
+<li><strong>Hardware.</strong> Real-time performance was only measured on one machine (NVIDIA Quadro P2000). CPU-only operation falls behind a live stream.</li>
+<li><strong>Small test split.</strong> The held-out test split has only seven images, so test-split figures are weak evidence.</li>
+<li><strong>No plate-text ground truth.</strong> The dataset labels plate <em>locations</em>, not plate <em>text</em>, so end-to-end OCR accuracy has not been measured (§6.6).</li>
+<li><strong>Time.</strong> The remaining known issues of the wider system are listed in Chapter 8.</li>
+</ul>
+<h2>1.9 Organisation of the Report</h2>
+<ul>
+<li><strong>Chapter 2</strong> reviews ALPR concepts, existing systems and the gap this project fills.</li>
+<li><strong>Chapter 3</strong> describes the development approach, tools, ethics and evaluation method.</li>
+<li><strong>Chapter 4</strong> gives the analysis and design: requirements, architecture and the detection algorithms.</li>
+<li><strong>Chapter 5</strong> describes the implementation, with emphasis on the AI/vision component and the student's individual contribution.</li>
+<li><strong>Chapter 6</strong> presents testing, results and an objective-by-objective evaluation.</li>
+<li><strong>Chapter 7</strong> discusses the findings and their limits.</li>
+<li><strong>Chapter 8</strong> concludes and gives recommendations and future work.</li>
+<li><strong>Appendices</strong> hold the Individual Contribution Statement, the installation guide, extra designs and results, and selected code.</li>
+</ul><h1>Chapter 2: Literature Review</h1>
+<h2>2.1 Introduction</h2>
+<p>This chapter reviews the concepts behind automatic licence plate recognition (ALPR), the existing systems relevant to SVDS, and the gap the project fills. It is organised as: key concepts (§2.2), existing systems (§2.3), a comparison (§2.4), the gap (§2.5), and the framework that guides the design (§2.6).</p>
+<h2>2.2 Key Concepts and Theories</h2>
+<h3>2.2.1 Two-stage ALPR</h3>
+<p>Most ALPR pipelines split the problem into two stages: (1) <strong>localisation</strong>, which finds the plate in the image, and (2) <strong>recognition</strong>, which reads the characters inside the located region. Keeping the stages separate makes each one simpler, independently testable and replaceable.</p>
+<h3>2.2.2 Object detection and YOLO</h3>
+<p>Object detection predicts a bounding box and a confidence score for each object of interest in an image. The YOLO ("You Only Look Once") family are single-stage detectors: one network pass produces all boxes, which makes them fast enough for video. YOLOv8, from Ultralytics, is an anchor-free member of the family with several sizes; the smallest, <strong>YOLOv8n</strong>, is used here because it runs in real time on a modest GPU. Models are normally fine-tuned from weights pretrained on a large dataset (COCO) rather than trained from scratch, which reduces the amount of new data needed.</p>
+<h3>2.2.3 Optical character recognition</h3>
+<p>OCR converts an image of text into a string. <strong>EasyOCR</strong> is an open-source, PyTorch-based engine that supports a character <em>allowlist</em>, which restricts the output alphabet and reduces spurious characters. OCR accuracy on a small plate crop depends strongly on pre-processing such as greyscale conversion, upscaling and binarisation (thresholding). <strong>Otsu's method</strong> chooses the binarisation threshold automatically from the image histogram.</p>
+<h3>2.2.4 Detection metrics</h3>
+<ul>
+<li><strong>Precision</strong> = TP / (TP + FP): of the boxes the model draws, the fraction that are correct.</li>
+<li><strong>Recall</strong> = TP / (TP + FN): of the real plates, the fraction the model finds.</li>
+<li><strong>IoU</strong> (intersection over union) measures how well a predicted box overlaps a true box.</li>
+<li><strong>mAP50</strong> is the mean average precision when a prediction counts as correct at IoU ≥ 0.5; <strong>mAP50-95</strong> averages over IoU thresholds from 0.5 to 0.95 and is stricter.</li>
+</ul>
+<h3>2.2.5 Fuzzy string matching</h3>
+<p>OCR on a moving or stationary vehicle rarely returns exactly the same string in consecutive frames. Comparing readings by <em>similarity</em> instead of equality tolerates this. Python's <code>difflib.SequenceMatcher</code> returns a similarity ratio between 0 and 1 for two strings; it is used here to decide whether a new reading is the same plate as a recent one.</p>
+<h2>2.3 Existing Systems / Related Work</h2>
+<ul>
+<li><strong>OpenALPR</strong> is an open-source ALPR library with pre-trained models for several countries' plate formats. It is a strong general reference, but it does not ship a model trained on Zambian plates.</li>
+<li><strong>Plate Recognizer</strong> is a commercial ALPR service. It uses the same split as this project, a lightweight capture client plus a separate recognition service. It is a paid API, which is a barrier for a budget-limited public-sector deployment.</li>
+<li><strong>Ultralytics YOLOv8</strong> is chosen here over older YOLO versions and over two-stage detectors such as Faster R-CNN for its balance of speed and accuracy on one consumer GPU, and for its support for training on a small custom single-class dataset.</li>
+<li><strong>EasyOCR</strong> is used for recognition (§2.2.3).</li>
+<li><strong>Vehicle registry and reporting systems.</strong> Registry and reporting systems store reports, ownership records and status but do not themselves watch for the reported vehicle. Where ALPR is used in policing, it is typically fixed roadside infrastructure rather than something integrated with a public reporting system.</li>
+</ul>
+<p><em>Note on sources.</em> The descriptions above are based on the projects' public documentation, listed in the References. No comparative accuracy figures from other systems are quoted, because none were measured on Zambian plates in this project.</p>
+<h2>2.4 Comparative Analysis</h2>
+<table>
+<thead>
+<tr>
+<th>Criterion</th>
+<th>OpenALPR</th>
+<th>Plate Recognizer</th>
+<th>This project (SVDS)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cost model</td>
+<td>Open source</td>
+<td>Paid service</td>
+<td>Open source, self-hosted</td>
+</tr>
+<tr>
+<td>Trained on Zambian plates</td>
+<td>No (generic regional models)</td>
+<td>Not specifically</td>
+<td>Yes (custom dataset)</td>
+</tr>
+<tr>
+<td>Runs on own hardware</td>
+<td>Yes</td>
+<td>Cloud API</td>
+<td>Yes (phone + local GPU)</td>
+</tr>
+<tr>
+<td>Linked to a public reporting workflow</td>
+<td>No</td>
+<td>No</td>
+<td>Yes (matches against active reports)</td>
+</tr>
+<tr>
+<td>Alerts to officers in real time</td>
+<td>Not included</td>
+<td>Not included</td>
+<td>Yes (WebSocket, built by the integration member)</td>
+</tr>
+</tbody>
+</table>
+<p>The table compares design properties, not accuracy. No accuracy comparison was carried out.</p>
+<h2>2.5 Research / Knowledge Gap</h2>
+<p>No system reviewed combines (a) public self-service reporting, (b) role-based police and admin oversight, (c) a detector trained for the specific plate format, and (d) real-time delivery of detection alerts. SVDS fills that gap. For the AI/vision component the specific gap is a <strong>detector trained on locally collected Zambian plate images and a robust, noise-tolerant read-and-report pipeline around it</strong>.</p>
+<h2>2.6 Conceptual Framework</h2>
+<p>The design follows a staged pipeline in which each stage discards input it cannot trust, so only clean, validated readings reach the backend:</p>
+<pre><code>frame → sample every Nth frame → detect plate (YOLOv8n) → crop
+      → greyscale / 4x upscale / Otsu threshold → OCR (allowlist)
+      → clean and validate text → fuzzy duplicate check → report to backend
+</code></pre>
+<p>Localisation is separated from recognition (§2.2.1), and the camera node is separated from the backend so the two can be deployed and changed independently.</p>
+<h2>2.7 Chapter Summary</h2>
+<p>ALPR and vehicle-registry systems are both mature on their own, but no reviewed system joins them for a Zambian plate format with a public, police and admin role split. The AI/vision component therefore adopts a two-stage pipeline: a custom-trained YOLOv8n localiser, EasyOCR recognition with pre-processing and validation, and fuzzy duplicate suppression, run in a decoupled camera-node process.</p><h1>Chapter 3: Methodology</h1>
+<h2>3.1 Introduction</h2>
+<p>This chapter explains how the project was carried out: the development approach, how requirements and data were obtained, the architecture, the tools, the ethical considerations, and how success was measured.</p>
+<h2>3.2 Research / Development Approach</h2>
+<p>SVDS was built <strong>iteratively</strong>, not to a single up-front specification. The web application (backend and frontend) and the camera-node detection pipeline ran as two work-streams that meet at one integration point, the <code>POST /alerts/check-plate</code> endpoint. This let the model's cycle (collect data, annotate, train, evaluate) proceed without waiting on the CRUD and authentication work, and each side could be retested independently.</p>
+<p>For the AI/vision component the approach is <strong>experimental</strong>: several training runs were made and compared (the <code>runs/detect/</code> directory holds runs named <code>svds-plate-detector</code>, <code>-2</code>, <code>-3</code>, <code>-final</code>, <code>-final-2</code> and others). The run <code>svds-plate-detector-final-2</code> produced the weights used by the camera node. The pipeline around the model was then refined against real footage from a phone camera, not only against the still-image validation set.</p>
+<pre><code>Requirements → Design → Implementation → Integration → Testing → (issues found? back to Requirements)
+</code></pre>
+<h2>3.3 Requirements / Data Collection</h2>
+<p><strong>Requirements</strong> were derived from (a) the gap in Chapter 1, (b) the natural three-way split of who touches a stolen-vehicle report (the person who filed it, the officer investigating, the administrator), and (c) the technical constraints of detection: a single cheap camera source, and no coupling of the detector to the backend's release cycle. No formal stakeholder interviews are recorded for this project; the requirements are the group's own analysis of the problem.</p>
+<p><strong>Data.</strong> Plate images were collected with phone cameras, the same class of device the deployed node uses, so that the training distribution (angle, lighting, blur, resolution) resembles the deployment distribution. They were annotated in Roboflow (project <code>zambia-number-plate-detection</code>, version 3) with one bounding-box class, and exported in YOLOv8 format.</p>
+<table>
+<thead>
+<tr>
+<th>Split</th>
+<th>Images on disk</th>
+<th>Labels on disk</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>train</td>
+<td>1,476</td>
+<td>1,476</td>
+</tr>
+<tr>
+<td>valid</td>
+<td>407</td>
+<td>407</td>
+</tr>
+<tr>
+<td>test</td>
+<td>7</td>
+<td>7</td>
+</tr>
+<tr>
+<td><strong>Total</strong></td>
+<td><strong>1,890</strong></td>
+<td><strong>1,890</strong></td>
+</tr>
+</tbody>
+</table>
+<p>These counts were obtained by counting the files in the exported dataset folder. The Roboflow README that accompanies the export says "The dataset includes 335 images" and describes 3 augmented versions per source image, which would give about 1,005 images and does not reconcile with 1,890. The training-split filenames, which have the form <code>&lt;source-id&gt;_jpg.rf.&lt;hash&gt;.jpg</code>, carry 1,270 distinct source ids for 1,476 images, the validation split 407 for 407, and the test split 7 for 7 (1,684 distinct ids in all). <strong>No source id appears in more than one split</strong>, so augmented copies of a photograph did not leak between training and validation. Because the README count, the 3× augmentation claim and the filename evidence do not agree, <strong>the number of original photographs is left for the student to confirm from the Roboflow project</strong>, and this report does not state it.</p>
+<p>Roboflow pre-processing and augmentation, as recorded in the export README:</p>
+<ul>
+<li>auto-orientation (EXIF stripping) and resize to 640 × 640 (stretch);</li>
+<li>50% chance of horizontal flip;</li>
+<li>random rotation between −15° and +15°;</li>
+<li>random brightness change between −25% and +25%;</li>
+<li>random Gaussian blur of 0–1.8 px (listed in the export README under bounding-box transformations).</li>
+</ul>
+<h2>3.4 System Architecture / Research Workflow</h2>
+<p>SVDS consists of three independently runnable processes that communicate only over the network: <strong><code>vrrs-backend</code></strong> (FastAPI and PostgreSQL), <strong><code>vrrs-frontend</code></strong> (React) and <strong><code>vrrs-node</code></strong> (the camera node). The camera node does not import anything from the backend.</p>
+<p><img alt="Figure 3.1: SVDS system architecture" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/04-system-design-1.png" /></p>
+<p>The research workflow for the AI/vision component is shown below.</p>
+<p><img alt="Figure 3.2: data and training workflow" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/05-object-detection-module-1.png" /></p>
+<h2>3.5 Tools and Technologies</h2>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Technology</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language</td>
+<td>Python</td>
+</tr>
+<tr>
+<td>Detection</td>
+<td>Ultralytics YOLOv8 (<code>yolov8n.pt</code> base weights), PyTorch with CUDA</td>
+</tr>
+<tr>
+<td>OCR</td>
+<td>EasyOCR</td>
+</tr>
+<tr>
+<td>Image and video handling</td>
+<td>OpenCV (<code>cv2</code>)</td>
+</tr>
+<tr>
+<td>Annotation and augmentation</td>
+<td>Roboflow</td>
+</tr>
+<tr>
+<td>Node ↔ backend transport</td>
+<td><code>requests</code> (HTTP/JSON)</td>
+</tr>
+<tr>
+<td>Configuration</td>
+<td><code>python-dotenv</code> (<code>.env</code>)</td>
+</tr>
+<tr>
+<td>Testing</td>
+<td>pytest</td>
+</tr>
+<tr>
+<td>Hardware</td>
+<td>NVIDIA Quadro P2000 GPU (training and inference); Android phone running an IP Webcam app (MJPEG stream)</td>
+</tr>
+<tr>
+<td>OS</td>
+<td>Windows 11</td>
+</tr>
+<tr>
+<td>Rest of system (built by other members)</td>
+<td>FastAPI, SQLAlchemy, PostgreSQL, React, Vite</td>
+</tr>
+</tbody>
+</table>
+<h2>3.6 Ethical and Legal Considerations</h2>
+<ul>
+<li><strong>Personal data in images.</strong> Licence plates identify vehicles, and vehicles can identify owners. Training images should be photographs of vehicles in public places, taken for this project. The dataset should not be published with images that show people's faces. Whether the images were collected with any permission beyond public visibility is not recorded and should be stated by the student.</li>
+<li><strong>Data minimisation on the node.</strong> The camera node forwards only the plate string, a confidence value, a camera identifier and a configured location string. It does not upload frames, and it holds no database access.</li>
+<li><strong>Licensing.</strong> The dataset export carries a CC BY 4.0 licence. YOLOv8 (Ultralytics) is released under AGPL-3.0, and EasyOCR under Apache 2.0. Anyone deploying the system beyond an academic prototype needs to check that these licences suit their use.</li>
+<li><strong>Consequences of a false match.</strong> A wrong plate reading could point officers at an innocent driver. The pipeline therefore favours precision over recall, matches only against reports that police have activated, and leaves the decision to a human officer who sees the alert. Officers can flag false positives in the web application.</li>
+<li><strong>Endpoint trust.</strong> <code>/alerts/check-plate</code> is unauthenticated because the node has no user identity. It can only return <code>CLEAR</code> or create an alert against an already-active report, so it cannot alter reports. It should nevertheless sit behind a private network or an API key in a real deployment.</li>
+<li><strong>Security of the rest of the system</strong> (passwords, JWT, role checks) is covered in the backend and security member's report.</li>
+</ul>
+<h2>3.7 Evaluation Method</h2>
+<ol>
+<li><strong>Model evaluation:</strong> precision, recall, mAP50 and mAP50-95 from the training run's per-epoch record (<code>results.csv</code>), plus a re-run of the final weights on the validation and test splits.</li>
+<li><strong>Unit testing</strong> of the node's pure logic (plate cleaning and fuzzy de-duplication) with pytest, isolated from the GPU stack so the tests can run anywhere.</li>
+<li><strong>System observation:</strong> running the node against the live stream and backend and recording what was and was not observed.</li>
+<li><strong>Objective-by-objective review</strong> against the individual objectives O1–O6 in §1.4.</li>
+</ol>
+<p>No user survey was run; there are no user-evaluation results in this report.</p>
+<h2>3.8 Chapter Summary</h2>
+<p>The project followed an iterative approach with an experimental training loop for the model. Data was collected with phone cameras, annotated in Roboflow, and exported as 1,890 labelled images. The tools are open-source Python libraries on a GPU-equipped Windows machine. Evaluation combines model metrics, unit tests and system observation.</p><h1>Chapter 4: System Analysis and Design</h1>
+<h2>4.1 Introduction</h2>
+<p>This chapter presents the analysis and design of SVDS. The system-level material (stakeholders, overall architecture) is shared by the group. The detailed requirements, use cases and algorithms are those of the <strong>AI/vision component</strong>, which is the subject of this individual report. Design work on the backend, security, real-time and frontend areas belongs to the other members and is summarised only where the camera node depends on it.</p>
+<h2>4.2 Stakeholder and User Analysis</h2>
+<table>
+<thead>
+<tr>
+<th>Stakeholder</th>
+<th>Interest in the system</th>
+<th>Interaction with the AI/vision component</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Reportee (member of the public)</td>
+<td>Files a stolen-vehicle report and follows its status</td>
+<td>Indirect: a filed and activated report becomes something the camera can match</td>
+</tr>
+<tr>
+<td>Police officer</td>
+<td>Investigates reports, receives alerts, marks vehicles found</td>
+<td>Receives alerts that the node's readings produce; flags false positives</td>
+</tr>
+<tr>
+<td>Administrator</td>
+<td>Manages accounts, watches system health and the audit trail</td>
+<td>Sees the camera node's online/offline status</td>
+</tr>
+<tr>
+<td>Camera-node operator</td>
+<td>Mounts the phone, starts the node, edits its <code>.env</code></td>
+<td>Direct user of the node</td>
+</tr>
+<tr>
+<td>Zambia Police Service (institution)</td>
+<td>Recovered vehicles, an audit trail</td>
+<td>Beneficiary</td>
+</tr>
+</tbody>
+</table>
+<h2>4.3 Functional Requirements</h2>
+<h3>Camera node (AI/vision)</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Requirement</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>FR-N1</td>
+<td>Connect to a live MJPEG video stream from a phone-mounted camera.</td>
+</tr>
+<tr>
+<td>FR-N2</td>
+<td>Process a configurable subset of frames (every Nth frame).</td>
+</tr>
+<tr>
+<td>FR-N3</td>
+<td>Detect licence plates in a processed frame using the custom-trained detector, at a configurable confidence threshold.</td>
+</tr>
+<tr>
+<td>FR-N4</td>
+<td>Crop each detected plate and pre-process it for OCR (greyscale, upscale, threshold).</td>
+</tr>
+<tr>
+<td>FR-N5</td>
+<td>Read the plate text, keep only readings above an OCR-confidence floor, and restrict characters to A–Z and 0–9.</td>
+</tr>
+<tr>
+<td>FR-N6</td>
+<td>Clean and validate the text against the expected plate shape (5–8 alphanumeric characters) and discard anything else.</td>
+</tr>
+<tr>
+<td>FR-N7</td>
+<td>Suppress repeated reports of the same plate within a cooldown window, tolerating OCR noise between frames.</td>
+</tr>
+<tr>
+<td>FR-N8</td>
+<td>Send each accepted reading to the backend over HTTP and log the response (<code>CLEAR</code> or <code>STOLEN</code>).</td>
+</tr>
+<tr>
+<td>FR-N9</td>
+<td>Recover automatically if the video stream drops.</td>
+</tr>
+<tr>
+<td>FR-N10</td>
+<td>Show a live preview with the detection box and plate text.</td>
+</tr>
+</tbody>
+</table>
+<h3>System-level requirements the node depends on (built by other members)</h3>
+<ul>
+<li>The backend exposes <code>POST /alerts/check-plate</code>, matches the plate against <code>missing</code> reports and returns <code>CLEAR</code> or <code>STOLEN</code>.</li>
+<li>The backend pushes a WebSocket message to connected police clients on a match.</li>
+<li>Role-based access, report lifecycle and analytics are provided by the backend and frontend.</li>
+</ul>
+<h2>4.4 Non-Functional Requirements</h2>
+<ul>
+<li><strong>Performance:</strong> the node processes every 5th frame by default to keep pace with the stream on the available GPU.</li>
+<li><strong>Precision over recall:</strong> false detections should be rarer than missed ones, because a single missed frame is recoverable on the next frame but a false alert points officers at an innocent vehicle.</li>
+<li><strong>Resilience:</strong> reconnect automatically on stream loss; a backend outage must not crash the node (failed POSTs are logged).</li>
+<li><strong>Decoupling:</strong> no dependency on backend internals; configuration only through environment variables.</li>
+<li><strong>Testability:</strong> the pure logic (cleaning and de-duplication) must be importable without the GPU stack.</li>
+<li><strong>Maintainability:</strong> thresholds are configuration, not constants in code.</li>
+</ul>
+<h2>4.5 Use Cases / User Stories</h2>
+<p><strong>UC-1: Detect and report a plate</strong></p>
+<ul>
+<li><em>Actor:</em> camera node (system actor); operator starts it.</li>
+<li><em>Precondition:</em> stream reachable, weights present, backend reachable.</li>
+<li><em>Main flow:</em> the node reads a frame, detects a plate, reads and validates its text, finds no recent duplicate, sends it to the backend, and logs the returned status.</li>
+<li><em>Alternate flows:</em> no plate found (skip); OCR not confident (skip); text malformed (skip); duplicate within cooldown (skip); backend unreachable (log and continue); stream lost (retry).</li>
+<li><em>Postcondition:</em> at most one report per distinct plate per cooldown window.</li>
+</ul>
+<p><strong>UC-2: Police officer is alerted</strong> (shared use case). The backend receives a <code>STOLEN</code> match from UC-1 and broadcasts it; the officer sees it on the dashboard. The node's part ends at the HTTP response.</p>
+<p><strong>User story.</strong> <em>As a camera-node operator, I want a stationary vehicle to be reported once, not on every frame, so that officers are not flooded with duplicate alerts.</em></p>
+<h2>4.6 System / Solution Architecture</h2>
+<p>The architecture is in Figure 3.1. The detection-to-alert flow, which is the system's core value path, is below. The node performs the first step only.</p>
+<p><img alt="Figure 4.1: detection-to-alert sequence" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/04-system-design-4.png" /></p>
+<p>The <strong>integration contract</strong> between the node and the backend is one endpoint:</p>
+<pre><code>POST /alerts/check-plate
+Body:     { &quot;license_plate&quot;: &quot;BAA1234&quot;, &quot;camera_id&quot;: &quot;PHONE-NODE-1&quot;,
+            &quot;confidence_score&quot;: 92.4, &quot;location_spotted&quot;: &quot;...&quot; }
+Response: { &quot;status&quot;: &quot;STOLEN&quot;, &quot;alert_id&quot;: 17, &quot;vehicle&quot;: {...} }
+       or { &quot;status&quot;: &quot;CLEAR&quot; }
+</code></pre>
+<p><code>confidence_score</code> is the detector's confidence as a percentage (0–100). The node holds no database access and no authentication of its own, and keeps only an in-memory list of recent readings, so restarting it loses no data of record.</p>
+<h2>4.7 Database / Data Design</h2>
+<p>The camera node has no database. It produces the data that the backend stores in the <code>alerts</code> table (<code>report_id</code>, <code>camera_id</code>, <code>confidence_score</code>, <code>location_spotted</code>, <code>detected_at</code>); that schema was designed by the backend member and is documented in the backend member's report and in Appendix C. The data design specific to this component is the <strong>dataset</strong>:</p>
+<ul>
+<li>one class, <code>zambia-number-plate-detection</code> (<code>nc: 1</code>);</li>
+<li>YOLO label format, one text file per image, one row per plate: class id and normalised centre x, centre y, width and height;</li>
+<li><code>data.yaml</code> giving the train, validation and test folders.</li>
+</ul>
+<h2>4.8 Interface / Interaction Design</h2>
+<p>The node has no web interface. Its two interfaces are:</p>
+<ol>
+<li><strong>The operator's console and preview window.</strong> An OpenCV window titled "SVDS Plate Node" shows each frame with a green box around the detected plate and the cleaned plate text above it. Pressing <code>q</code> quits. The console prints <code>[PLATE] backend status: CLEAR|STOLEN</code> for each report.</li>
+<li><strong>The <code>.env</code> file</strong>, whose keys are <code>MODEL_PATH</code>, <code>PHONE_STREAM_URL</code>, <code>BACKEND_URL</code>, <code>CAMERA_ID</code>, <code>LOCATION_SPOTTED</code>, <code>DETECT_CONF</code>, <code>PROCESS_EVERY_N_FRAMES</code>, <code>RESEND_COOLDOWN_SECONDS</code>, <code>DEDUP_SIMILARITY_THRESHOLD</code> and <code>DEVICE</code>.</li>
+</ol>
+<p>The web pages that display the node's output (Alerts, Cameras, Analytics) were designed by the frontend member.</p>
+<h2>4.9 Algorithms / Models / Technical Design</h2>
+<h3>4.9.1 Detector</h3>
+<p>A single-class YOLOv8n model fine-tuned from COCO-pretrained <code>yolov8n.pt</code>. It finds "where the plate is" only. Reading the characters is left to OCR so that the OCR engine can be replaced without retraining.</p>
+<h3>4.9.2 Read-and-report pipeline</h3>
+<p><img alt="Figure 4.2: OCR and post-processing pipeline" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/05-object-detection-module-2.png" /></p>
+<p>Why each stage exists:</p>
+<ul>
+<li><strong>Frame skipping (every 5th frame):</strong> running detection and OCR on every frame would fall behind the live stream on the available hardware.</li>
+<li><strong>Greyscale, 4× cubic upscale, Otsu threshold:</strong> a raw crop is small and low-contrast; upscaling and binarising it before OCR is a standard way to make small text easier to read. (Its benefit was not measured in isolation in this project.)</li>
+<li><strong>Character allowlist:</strong> stops the OCR engine from producing plausible-looking non-plate characters from background clutter.</li>
+<li><strong>OCR confidence floor (0.3):</strong> discards low-confidence text fragments.</li>
+<li><strong>Regex validation (<code>[A-Z0-9]{5,8}</code>):</strong> discards strings that cannot be a plate, rather than forwarding a guess.</li>
+<li><strong>Fuzzy cooldown:</strong> see below.</li>
+</ul>
+<h3>4.9.3 Fuzzy duplicate suppression</h3>
+<p>A stationary vehicle is re-read on every processed frame, and OCR noise makes the string drift (for example <code>ALX3665</code>, <code>ALK3665</code>, <code>AL3065</code> for one physical plate). A cooldown keyed on the <em>exact</em> string lets every variant through. The design instead keeps a list of <code>(plate, timestamp)</code> readings, drops entries older than the cooldown (default 15 s), and treats a new reading as a duplicate if its <code>SequenceMatcher</code> similarity to any remaining entry is at least a threshold (default 0.75).</p>
+<p>The threshold is a trade-off. Too low, and two genuinely different plates that share most characters would be merged and one would go unreported. Too high, and OCR jitter would slip through as separate reports. The value 0.75 was chosen so that single-character OCR errors are merged while clearly different plates are not (see tests in §6.3). It was not tuned on a labelled set of live readings, and that is a limitation.</p>
+<h2>4.10 Chapter Summary</h2>
+<p>The camera node is specified by ten functional requirements and six non-functional constraints. Its design is a staged pipeline (sample, detect, crop, pre-process, OCR, validate, de-duplicate, report) around a single-class YOLOv8n detector. It is connected to the rest of SVDS by a single HTTP contract.</p><h1>Chapter 5: Implementation / Development</h1>
+<h2>5.1 Introduction</h2>
+<p>This chapter describes how the AI/vision component was built: the dataset and model, and the camera node that runs them. It also summarises how the component was integrated with the other members' work, and identifies the student's own contribution.</p>
+<h2>5.2 Development Environment</h2>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Machine</td>
+<td>Windows 11 PC</td>
+</tr>
+<tr>
+<td>GPU</td>
+<td>NVIDIA Quadro P2000 (used for training and real-time inference)</td>
+</tr>
+<tr>
+<td>Python environment</td>
+<td>Conda environment <code>yolov8-env</code> with GPU-enabled PyTorch: Python 3.12.13, PyTorch 2.5.1 (CUDA 12.1 build), Ultralytics 8.4.83, EasyOCR 1.7.2, OpenCV 5.0.0</td>
+</tr>
+<tr>
+<td>Camera source</td>
+<td>Android phone running an IP Webcam app, streaming MJPEG over Wi-Fi or a phone hotspot</td>
+</tr>
+<tr>
+<td>Annotation</td>
+<td>Roboflow (browser)</td>
+</tr>
+<tr>
+<td>Editor</td>
+<td>Visual Studio Code</td>
+</tr>
+<tr>
+<td>Version control</td>
+<td>Git</td>
+</tr>
+<tr>
+<td>Tests</td>
+<td>pytest</td>
+</tr>
+</tbody>
+</table>
+<h2>5.3 System Components / Modules</h2>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Location</th>
+<th>Purpose</th>
+<th>Built by</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Dataset and <code>data.yaml</code></td>
+<td><code>zambia-number-plate-detection-3/</code> (Roboflow export)</td>
+<td>Labelled plate images</td>
+<td>AI/vision (this report)</td>
+</tr>
+<tr>
+<td>Trained detector</td>
+<td><code>runs/detect/svds-plate-detector-final-2/weights/best.pt</code></td>
+<td>Plate localisation</td>
+<td>AI/vision (this report)</td>
+</tr>
+<tr>
+<td>Camera node</td>
+<td><code>vrrs-node/plate_node.py</code></td>
+<td>Stream, detect, OCR, validate, de-duplicate, report</td>
+<td>AI/vision (this report)</td>
+</tr>
+<tr>
+<td>Plate utilities</td>
+<td><code>vrrs-node/plate_utils.py</code></td>
+<td>Plate cleaning and fuzzy de-duplication (pure Python)</td>
+<td>AI/vision (this report)</td>
+</tr>
+<tr>
+<td>Node unit tests</td>
+<td><code>vrrs-node/tests/test_plate_utils.py</code></td>
+<td>8 pytest tests</td>
+<td>AI/vision (this report)</td>
+</tr>
+<tr>
+<td><code>check-plate</code> endpoint, database, auth</td>
+<td><code>vrrs-backend/</code></td>
+<td>Matching, storage, access control</td>
+<td>Backend and security member</td>
+</tr>
+<tr>
+<td>WebSocket alerts, camera status and feed proxy</td>
+<td><code>vrrs-backend/app/routers/alerts.py</code>, <code>system.py</code></td>
+<td>Real-time delivery</td>
+<td>Real-time and integration member</td>
+</tr>
+<tr>
+<td>Web portals and analytics</td>
+<td><code>vrrs-frontend/</code></td>
+<td>User interface</td>
+<td>Frontend member</td>
+</tr>
+</tbody>
+</table>
+<h2>5.4 Key Implementation Details</h2>
+<h3>5.4.1 Dataset preparation and training</h3>
+<p>The dataset was annotated and exported from Roboflow in YOLOv8 format (§3.3). Training used the Ultralytics API with the settings recorded in the run's <code>args.yaml</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Base weights</td>
+<td><code>yolov8n.pt</code> (COCO-pretrained)</td>
+</tr>
+<tr>
+<td>Epochs</td>
+<td>100 (<code>patience</code> 100, so no early stop)</td>
+</tr>
+<tr>
+<td>Batch size</td>
+<td>8</td>
+</tr>
+<tr>
+<td>Image size</td>
+<td>640 × 640</td>
+</tr>
+<tr>
+<td>Device</td>
+<td>GPU 0</td>
+</tr>
+<tr>
+<td>Optimiser</td>
+<td><code>auto</code> (Ultralytics default selection)</td>
+</tr>
+<tr>
+<td>Learning rate</td>
+<td><code>lr0</code> = 0.01, final ratio <code>lrf</code> = 0.01, cosine schedule off</td>
+</tr>
+<tr>
+<td>In-training augmentation</td>
+<td>mosaic 1.0, horizontal flip 0.5, HSV jitter, random erasing 0.4</td>
+</tr>
+</tbody>
+</table>
+<p>The run <code>svds-plate-detector-final-2</code> is one of about twenty runs in <code>runs/detect/</code>. It is the one whose <code>best.pt</code> the node loads, via <code>MODEL_PATH</code>. This report does not attempt to reconstruct what differed between the other runs, because their settings were not recorded here.</p>
+<h3>5.4.2 The camera node (<code>plate_node.py</code>)</h3>
+<p>At start-up the node loads the detector once (<code>YOLO(MODEL_PATH)</code>, moved to the configured device) and creates one EasyOCR reader with GPU use following the device setting. It then opens the phone stream with <code>cv2.VideoCapture</code> and loops:</p>
+<pre><code class="language-python">frame_count += 1
+if frame_count % PROCESS_EVERY_N_FRAMES == 0:
+    for res in model(frame, conf=DETECT_CONF, device=DEVICE, verbose=False):
+        for box in res.boxes:
+            x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+            crop = frame[max(0, y1):y2, max(0, x1):x2]
+            gray    = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+            resized = cv2.resize(gray, None, fx=4, fy=4, interpolation=cv2.INTER_CUBIC)
+            thresh  = cv2.threshold(resized, 0, 255,
+                                    cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+            ocr = reader.readtext(thresh,
+                    allowlist=&quot;ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 &quot;)
+            parts = [t.strip() for _, t, c in ocr if c &gt; 0.3]
+            plate = clean_plate_text(&quot; &quot;.join(parts)) if parts else None
+            ...
+            if plate and not is_recent_duplicate(recent_sightings, plate, now, COOLDOWN):
+                recent_sightings.append((plate, now))
+                report_plate(plate, round(det_conf * 100, 1))
+</code></pre>
+<p>Defaults, all overridable in <code>.env</code>: detector confidence 0.4, every 5th frame, cooldown 15 s, similarity 0.75, device <code>cuda</code>.</p>
+<p><code>report_plate</code> posts the JSON payload of §4.6 with a 5-second timeout. A network or HTTP error is caught and printed, so a backend outage does not stop detection.</p>
+<h3>5.4.3 Plate cleaning and de-duplication (<code>plate_utils.py</code>)</h3>
+<p>These two functions were moved into their own module, free of <code>cv2</code>, <code>torch</code>, <code>ultralytics</code> and <code>easyocr</code> imports, so they can be unit tested without the GPU stack.</p>
+<pre><code class="language-python">PLATE_PATTERN = re.compile(r&quot;[A-Z0-9]{5,8}&quot;)
+
+def clean_plate_text(raw: str) -&gt; str | None:
+    text = re.sub(r&quot;[^A-Z0-9]&quot;, &quot;&quot;, raw.upper())
+    return text if PLATE_PATTERN.fullmatch(text) else None
+
+def is_recent_duplicate(recent_sightings, plate, now, cooldown_seconds,
+                        similarity_threshold=DEDUP_SIMILARITY_THRESHOLD):
+    recent_sightings[:] = [(p, t) for p, t in recent_sightings
+                           if now - t &lt;= cooldown_seconds]
+    return any(difflib.SequenceMatcher(None, plate, p).ratio() &gt;= similarity_threshold
+               for p, _ in recent_sightings)
+</code></pre>
+<h2>5.5 Integration</h2>
+<p>The node integrates with the rest of SVDS through one contract only (§4.6). Nothing in <code>vrrs-node</code> imports from <code>vrrs-backend</code>; the backend URL is configuration. The backend's <code>check-plate</code> endpoint, written by the backend member, normalises the received plate (strips non-alphanumeric characters, upper-cases it) and looks for an active report with that plate. This means the backend tolerates spacing differences the node might send. The WebSocket broadcast to police dashboards and the live-feed proxy that the Cameras page uses are the real-time and integration member's work. The node's responsibility ends when it receives the HTTP response.</p>
+<p>The backend also contains a generic <code>POST /model/predict-image</code> endpoint. It is a placeholder for a server-hosted model that was never wired up, and it is <strong>not</strong> the detection path: inference runs in the node process. This was a deliberate design choice, so that the backend does not need a GPU or the computer-vision dependencies.</p>
+<h2>5.6 Challenges and Solutions</h2>
+<table>
+<thead>
+<tr>
+<th>Challenge</th>
+<th>Cause</th>
+<th>Solution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Node process aborted on start-up on Windows</td>
+<td>PyTorch and OpenCV each bundle Intel's OpenMP runtime (<code>libiomp5md.dll</code>); loading both aborts the process</td>
+<td><code>os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")</code> is set before either library is imported</td>
+</tr>
+<tr>
+<td>Same stationary plate reported again and again</td>
+<td>OCR output drifts between frames, so an exact-string cooldown never matched</td>
+<td>Replaced with fuzzy matching (<code>SequenceMatcher</code>, threshold 0.75) over a list of recent readings; extracted to <code>plate_utils.py</code> and unit-tested</td>
+</tr>
+<tr>
+<td><code>import torch</code> failed with <code>WinError 126</code> on the development machine</td>
+<td>Corrupted Visual C++ runtime files in System32</td>
+<td>Repaired the "Microsoft Visual C++ 2022 X64 Minimum Runtime" package</td>
+</tr>
+<tr>
+<td><code>cv2.imshow</code> unavailable in the GPU environment</td>
+<td>Both <code>opencv-python</code> and <code>opencv-python-headless</code> were installed, which corrupts the shared <code>cv2</code> package</td>
+<td>Removed <code>opencv-python-headless</code> from <code>yolov8-env</code></td>
+</tr>
+<tr>
+<td>Node exits if the phone stream is unreachable at start-up</td>
+<td><code>cv2.VideoCapture</code> fails to open, and the node raises a clear <code>RuntimeError</code> naming the likely causes</td>
+<td>Kept deliberately, so a misconfigured <code>PHONE_STREAM_URL</code> is noticed immediately. Once running, a dropped stream is retried in the loop</td>
+</tr>
+<tr>
+<td>Phone IP address changes when it reconnects to the hotspot</td>
+<td>DHCP</td>
+<td>The operator updates <code>PHONE_STREAM_URL</code> in <code>.env</code> (a static IP or a stream-discovery step is future work)</td>
+</tr>
+<tr>
+<td>Missed plates (recall 0.75, §6.4)</td>
+<td>Motion blur, angle, small plates</td>
+<td>Accepted as a trade-off for high precision. Sampling many frames per vehicle gives further chances to catch the plate</td>
+</tr>
+</tbody>
+</table>
+<h2>5.7 Individual Contribution (group project)</h2>
+<p>The student was responsible for the <strong>AI/vision component</strong> (parts 1 and 2 of the group's seven work areas, see Appendix A):</p>
+<ul>
+<li>collecting and annotating the plate dataset in Roboflow and exporting it in YOLOv8 format;</li>
+<li>training and evaluating the YOLOv8n plate detector, and selecting the weights the node uses;</li>
+<li>designing and writing the camera node <code>plate_node.py</code>: stream handling, frame sampling, detection, crop pre-processing, OCR and reporting;</li>
+<li>designing and writing <code>plate_utils.py</code> (plate validation and fuzzy de-duplication) and its eight unit tests;</li>
+<li>configuring the GPU environment for the node.</li>
+</ul>
+<p>Work by other members that this component depends on, and which is <strong>not</strong> claimed here: the backend, database and <code>check-plate</code> matching logic; JWT authentication and role enforcement; the WebSocket alert broadcast, camera status and live-feed proxy; the React portals and analytics.</p>
+<h2>5.8 Chapter Summary</h2>
+<p>The AI/vision component is a fine-tuned YOLOv8n detector plus a camera node that samples a phone stream, crops and pre-processes detected plates, reads them with EasyOCR, validates and de-duplicates the text, and reports over one HTTP contract. Its main implementation problems were library conflicts on Windows and OCR noise, both solved in code.</p><h1>Chapter 6: Testing, Results and Evaluation</h1>
+<h2>6.1 Introduction</h2>
+<p>This chapter evaluates the AI/vision component. It reports what was measured, what was observed, and, just as importantly, what was <strong>not</strong> measured. Every number below comes from a file or a command output that can be inspected: <code>results.csv</code>, <code>eval_results.json</code>, the pytest output, and the node's own log.</p>
+<h2>6.2 Testing Strategy</h2>
+<table>
+<thead>
+<tr>
+<th>Level</th>
+<th>Technique</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Model evaluation</td>
+<td>Precision, recall, mAP on held-out splits</td>
+<td>The YOLOv8n plate detector</td>
+</tr>
+<tr>
+<td>Unit testing</td>
+<td>pytest on pure functions, with no GPU stack</td>
+<td><code>plate_utils.py</code> (cleaning, de-duplication)</td>
+</tr>
+<tr>
+<td>Robustness observation</td>
+<td>Running the node against unreachable and dropped streams</td>
+<td><code>plate_node.py</code> start-up and reconnection</td>
+</tr>
+<tr>
+<td>System testing</td>
+<td>Live phone stream → node → backend → dashboard</td>
+<td>Partly achieved: live readings reached the backend; no <code>STOLEN</code> alert recorded (§6.4.3)</td>
+</tr>
+<tr>
+<td>Acceptance / user testing</td>
+<td>None carried out</td>
+<td>See §6.5</td>
+</tr>
+</tbody>
+</table>
+<h2>6.3 Test Cases and Results</h2>
+<p><strong>Table 6.1: Test cases for the AI/vision component</strong></p>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Test Case</th>
+<th>Expected Result</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TC-01</td>
+<td><code>clean_plate_text</code> given lower case and punctuation (<code>"baa 1234"</code>, <code>"BAA-1234"</code>)</td>
+<td><code>"BAA1234"</code> in both cases</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-02</td>
+<td><code>clean_plate_text</code> given text shorter than 5 or longer than 8 characters</td>
+<td><code>None</code> (discarded)</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-03</td>
+<td><code>clean_plate_text</code> given only symbols</td>
+<td><code>None</code></td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-04</td>
+<td>Same plate re-read inside the cooldown window</td>
+<td>Treated as duplicate</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-05</td>
+<td>OCR-jitter variants of one plate (<code>ALX3665</code>, <code>ALK3665</code>, <code>AL3065</code>-style) inside the window</td>
+<td>Treated as duplicates</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-06</td>
+<td>A genuinely different plate inside the window</td>
+<td>Not a duplicate</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-07</td>
+<td>Same plate after the cooldown has expired</td>
+<td>Not a duplicate</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-08</td>
+<td>Expired entries in the sightings list</td>
+<td>Pruned from the list</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-09</td>
+<td>Detector on the validation split (407 images)</td>
+<td>Precision above 0.95 and mAP50 above 0.75</td>
+<td>Pass (0.990 / 0.797)</td>
+</tr>
+<tr>
+<td>TC-10</td>
+<td>Detector on the test split (7 images)</td>
+<td>Reported, no threshold set</td>
+<td>Reported (§6.4.2)</td>
+</tr>
+<tr>
+<td>TC-11</td>
+<td>Start node with an unreachable stream</td>
+<td>Clear error, not a silent hang</td>
+<td>Pass (observed, §6.4.3)</td>
+</tr>
+<tr>
+<td>TC-12</td>
+<td>Stream drops while the node is running</td>
+<td>Node retries instead of exiting</td>
+<td>Pass (observed in the node's log, §6.4.3)</td>
+</tr>
+<tr>
+<td>TC-13a</td>
+<td>Live phone stream → node → backend, plate not on the stolen list</td>
+<td>Backend returns <code>CLEAR</code></td>
+<td>Pass (8 live readings, §6.4.3)</td>
+</tr>
+<tr>
+<td>TC-13b</td>
+<td>Live stream → node → backend → dashboard alert for an active report</td>
+<td><code>STOLEN</code> and a dashboard alert</td>
+<td><strong>Not verified</strong></td>
+</tr>
+<tr>
+<td>TC-14</td>
+<td>End-to-end OCR accuracy on real plates</td>
+<td>A measured character or plate accuracy</td>
+<td><strong>Not measured</strong> (no text ground truth)</td>
+</tr>
+</tbody>
+</table>
+<p>TC-01 to TC-08 correspond one-to-one to the eight tests in <code>vrrs-node/tests/test_plate_utils.py</code>. The suite was re-run while preparing this report: <strong>8 passed in 0.06 s</strong> (Appendix D). The exact inputs are in the test file; TC-04 to TC-08 above are summaries of them.</p>
+<h2>6.4 Experimental Results / Performance Results</h2>
+<h3>6.4.1 Training results (validation split)</h3>
+<p>Final-epoch (epoch 100 of 100) values from <code>results.csv</code>, alongside epoch 97, which Ultralytics' fitness measure (0.1 × mAP50 + 0.9 × mAP50-95) selects as best:</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Epoch 100</th>
+<th>Best-fitness epoch (97)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Precision</td>
+<td>0.988</td>
+<td>0.990</td>
+</tr>
+<tr>
+<td>Recall</td>
+<td>0.751</td>
+<td>0.752</td>
+</tr>
+<tr>
+<td>mAP50</td>
+<td>0.801</td>
+<td>0.800</td>
+</tr>
+<tr>
+<td>mAP50-95</td>
+<td>0.686</td>
+<td>0.686</td>
+</tr>
+</tbody>
+</table>
+<p><code>best.pt</code> is the checkpoint saved at the best-fitness epoch, so the deployed weights correspond to the epoch-97 column (assuming training was not resumed, which the record does not show).</p>
+<p><strong>Re-evaluation of the deployed <code>best.pt</code></strong> with <code>evaluate_model.py</code> (validation split, 407 images, 452 plate instances):</p>
+<table>
+<thead>
+<tr>
+<th>Split</th>
+<th>Images</th>
+<th>Instances</th>
+<th>Precision</th>
+<th>Recall</th>
+<th>mAP50</th>
+<th>mAP50-95</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Validation</td>
+<td>407</td>
+<td>452</td>
+<td>0.990</td>
+<td>0.752</td>
+<td>0.797</td>
+<td>0.690</td>
+</tr>
+<tr>
+<td>Test</td>
+<td>7</td>
+<td>11</td>
+<td>0.764</td>
+<td>0.909</td>
+<td>0.881</td>
+<td>0.725</td>
+</tr>
+</tbody>
+</table>
+<p>Inference time on the Quadro P2000 was about 11.2 ms per image for the model alone (preprocess 0.8 ms, postprocess 1.9 ms). This excludes OCR, the HTTP call and video decoding, so it is <strong>not</strong> the frame rate of the whole node.</p>
+<p><img alt="Figure 6.1: training and validation curves over 100 epochs" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/detection-model/results.png" /></p>
+<p><img alt="Figure 6.2: confusion matrix on the validation set" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/detection-model/confusion_matrix.png" /></p>
+<p><img alt="Figure 6.3: precision-recall curve" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/detection-model/BoxPR_curve.png" /></p>
+<p><img alt="Figure 6.4: predicted boxes on validation images" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/detection-model/val_batch0_pred.jpg" /></p>
+<p><img alt="Figure 6.5: ground-truth boxes on the same images" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/detection-model/val_batch0_labels.jpg" /></p>
+<h3>6.4.2 Test split</h3>
+<p>The test split holds only 7 images with 11 plates. Its precision (0.764) is far below the validation precision (0.990), and its recall (0.909) is above it. With 11 instances, one or two false detections move precision by tens of percentage points, so these figures show that the model works on unseen images but <strong>cannot be used to estimate the true error rates</strong>. A larger test set is needed.</p>
+<h3>6.4.3 Robustness observations</h3>
+<ul>
+<li><strong>Live readings reached the backend (TC-13a).</strong> The node's log <code>vrrs-node/node_live.log</code> (last modified 14 September 2026) records a real run: the detector loaded on <code>cuda</code>, the node connected to the phone stream, and eight readings were posted to the backend, each answered <code>backend status: CLEAR</code>. The readings were <code>ALK3665</code>, <code>AK3665</code>, <code>ALX3665</code>, <code>ALK3665</code>, <code>ALLX3665</code>, <code>ALX3665</code>, <code>XI5998</code> and <code>G9QEXIH</code>. The first six differ by one or two characters and appear to be repeated, noisy reads of one plate; the log does not say what the true plate was. This run shows the phone → node → backend path working, and that the backend was reached and answered.</li>
+<li><strong>The same log is the evidence for the de-duplication fix.</strong> Six near-identical reports of one apparent plate in one run is the OCR-jitter problem described in §4.9.3. The run predates the fuzzy-matching fix (the fix and its unit tests were written afterwards), so it shows the problem, not the fix working on live footage.</li>
+<li><strong>Unreachable stream at start-up (TC-11).</strong> When the system was later started, the phone's address was unreachable (a TCP test to the configured address failed). The node loaded YOLOv8n and EasyOCR, then stopped with an explicit <code>Could not open video stream...</code> error naming the likely causes, as designed.</li>
+<li><strong>Stream loss while running (TC-12).</strong> The same live log ends with an OpenCV/FFmpeg stream timeout after about 30 s followed by <code>Lost connection to stream, retrying...</code> (twice), showing the retry branch executing instead of the node exiting. The log does not show a later successful reconnection, so recovery <em>after</em> the stream returns is not demonstrated.</li>
+</ul>
+<h3>6.4.4 What was not verified</h3>
+<ul>
+<li><strong>No recorded <code>STOLEN</code> match</strong> (TC-13b). All eight live readings returned <code>CLEAR</code>. There is no recorded run in which a real vehicle's plate matched an active report and produced an alert on the dashboard, and the camera-node preview window has not been captured. Latency from a plate becoming visible to an alert appearing has therefore <strong>not been measured</strong>, and no latency figure is claimed. It is also not known whether the plate in the log was ever on the stolen list.</li>
+<li><strong>No OCR accuracy figure</strong> (TC-14). The dataset labels where plates are, not what they say, so read accuracy cannot be computed from it. Producing that number needs a set of plate crops with typed ground-truth strings.</li>
+<li><strong>No comparison of alternatives</strong>, for example with and without the greyscale, upscale and threshold stage, or with other similarity thresholds.</li>
+</ul>
+<h2>6.5 User Evaluation</h2>
+<p>None carried out. No officers, operators or members of the public tested the node, and no survey or interview data exist.</p>
+<h2>6.6 Analysis of Results</h2>
+<ul>
+<li>The validation metrics show a detector that is <strong>precise but misses about a quarter of plates</strong> in still images (precision 0.99, recall 0.75). In <code>results.csv</code>, mAP50 is already about 0.78 at epoch 10 and reaches about 0.80 at epoch 100, and mAP50-95 rises from about 0.59 to 0.686 with only about +0.004 over the last ten epochs. More epochs alone would therefore give little. More or more varied data, especially examples of the missed cases, is the more promising lever.</li>
+<li>The re-run of the deployed weights matches the recorded training metrics to within about 0.005 on every measure, which confirms that <code>best.pt</code> is the model that was trained and evaluated, and that the recorded numbers are reproducible.</li>
+<li>The test split contradicts the validation picture on precision. With 11 instances it is inconclusive, but it is a reminder that the validation score is measured on images from the same collection effort and may overstate performance on new scenes.</li>
+<li>The unit tests show that the parts of the pipeline that could be isolated behave as specified, in particular that jittery re-reads of one plate are suppressed while a different plate is not.</li>
+<li>The live log shows the pipeline reading real plates and reaching the backend, but the absence of OCR accuracy and of a recorded <code>STOLEN</code> alert means the <em>pipeline as a whole</em> is supported by design, component evidence and a partial live run, not by a measured end-to-end result.</li>
+</ul>
+<h2>6.7 Objective-by-Objective Evaluation</h2>
+<table>
+<thead>
+<tr>
+<th>Objective</th>
+<th>Evidence</th>
+<th>Verdict</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>O1: Collect and annotate a dataset with train/validation/test splits</td>
+<td>1,890 labelled images in three splits, no source-id overlap between splits (§3.3). Original photograph count unconfirmed; test split very small</td>
+<td><strong>Achieved</strong>, with the caveats stated</td>
+</tr>
+<tr>
+<td>O2: Train a detector reaching precision above 0.95 and mAP50 above 0.75 on validation</td>
+<td>0.990 precision, 0.797 mAP50 (re-run); 0.988 and 0.801 at epoch 100</td>
+<td><strong>Achieved</strong></td>
+</tr>
+<tr>
+<td>O3: Read plate text with OCR and validate its format</td>
+<td>Implemented in <code>plate_node.py</code> and <code>clean_plate_text</code>; validation logic unit-tested (TC-01 to TC-03). OCR read accuracy not measured</td>
+<td><strong>Achieved in implementation; accuracy unproven</strong></td>
+</tr>
+<tr>
+<td>O4: Suppress repeated reports despite OCR noise</td>
+<td>Fuzzy de-duplication implemented; TC-04 to TC-08 pass</td>
+<td><strong>Achieved</strong> at unit level; not measured on live footage</td>
+</tr>
+<tr>
+<td>O5: Decoupled camera node that reports over HTTP and recovers from stream loss</td>
+<td>Separate process, single HTTP contract; 8 live readings posted and answered <code>CLEAR</code> (TC-13a); retry branch observed (TC-12); no <code>STOLEN</code> alert recorded, and reconnection after recovery not shown</td>
+<td><strong>Largely achieved</strong>: reporting demonstrated live; alert path and recovery not demonstrated</td>
+</tr>
+<tr>
+<td>O6: Evaluate the model and node quantitatively and by automated tests</td>
+<td>Metrics in §6.4, 8 passing tests</td>
+<td><strong>Achieved</strong> for the model and the pure logic; not for the whole pipeline</td>
+</tr>
+</tbody>
+</table>
+<h2>6.8 Individual Results</h2>
+<p>All results in this chapter are attributable to the student's own component. Results of the backend (including <code>check-plate</code> tests), real-time delivery and frontend are in the other members' reports and are not reproduced or claimed here.</p>
+<h2>6.9 Chapter Summary</h2>
+<p>The detector meets its numeric targets on the validation split (precision 0.990, mAP50 0.797), the eight unit tests pass, and the node's start-up and stream-loss behaviour was observed. A live run showed eight readings reaching the backend, but a <code>STOLEN</code> alert on the dashboard, OCR accuracy and latency were not recorded, and the seven-image test split is too small to be conclusive.</p><h1>Chapter 7: Discussion</h1>
+<h2>7.1 Introduction</h2>
+<p>This chapter interprets the results of Chapter 6 in relation to the problem and the objectives, compares them with related work, states the contributions, and discusses limitations.</p>
+<h2>7.2 Interpretation of Findings</h2>
+<p><strong>The detector suits the use case.</strong> Precision of about 0.99 means almost every box the model draws is a real plate. Recall of about 0.75 means roughly one plate in four is missed in a still image. For a system whose alerts go to police, this is the right side of the trade-off. A missed plate in one sampled frame is likely to be caught in a later frame of the same passing vehicle, whereas a false box would trigger OCR and possibly a wrong match. This reasoning is an argument from design, not a measurement: the per-vehicle detection rate across a video was not measured.</p>
+<p><strong>mAP50 versus mAP50-95.</strong> The gap between mAP50 (about 0.80) and mAP50-95 (about 0.69) shows that boxes are usually in the right place but not always tight. That matters little for this pipeline, because the crop is upscaled and binarised before OCR and a slightly loose box still contains the plate. A box that clips characters would hurt OCR more than one that is too large, and this was not analysed.</p>
+<p><strong>Software-level noise handling matters as much as the model.</strong> The largest practical problem on real footage was not detection but OCR jitter on a stationary vehicle. Fuzzy de-duplication fixed it in a few lines of code, and unit tests now pin the behaviour down.</p>
+<p><strong>Answer to research question 1</strong> (can YOLOv8n plus an open-source OCR engine read Zambian plates well enough for real-time matching on a phone camera and consumer GPU?). The detection half is supported by measured metrics. The reading half is <strong>not yet supported by measurement</strong>: no labelled plate-text set exists, so end-to-end read accuracy is unknown, and no live run producing a <code>STOLEN</code> alert was recorded. The honest answer is "detection: yes, on this evidence; reading and real-time matching: plausible and implemented, but unproven".</p>
+<p><strong>Answer to research question 2</strong> (can the pipeline be a decoupled component talking only over HTTP?). Yes. The node is a separate process with a single-endpoint contract, and it has been run and tested without importing anything from the backend.</p>
+<h2>7.3 Comparison with Existing Work</h2>
+<p>No accuracy figures from OpenALPR, Plate Recognizer or published ALPR studies were reproduced on the Zambian test set, so no numerical comparison is made. The comparison in §2.4 is on design properties: the project is self-hosted and open source, is trained on locally collected plates, and is linked to a reporting workflow. Reported mAP values from other datasets are not comparable with these results, because the datasets, the number of classes and the difficulty differ.</p>
+<h2>7.4 Contributions of the Project</h2>
+<ul>
+<li><strong>Practical:</strong> a working prototype in which a phone camera and a consumer GPU feed plate readings into a police-facing stolen-vehicle registry.</li>
+<li><strong>Technical:</strong> a single-class YOLOv8n plate detector fine-tuned on locally collected Zambian plate images, released as reproducible artifacts (training arguments, per-epoch metrics, curves); a noise-tolerant read-validate-de-duplicate pipeline; a GPU-free unit-testable core.</li>
+<li><strong>Architectural:</strong> a decoupled camera-node design that could be moved to fixed roadside cameras without backend changes.</li>
+</ul>
+<h2>7.5 Limitations and Implications</h2>
+<table>
+<thead>
+<tr>
+<th>Limitation</th>
+<th>Implication for interpreting the results</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Small dataset with uncertain source-image count</td>
+<td>The metrics may not generalise to other cameras, regions, plate styles or lighting</td>
+</tr>
+<tr>
+<td>Splits checked for leakage by filename only</td>
+<td>No source-image name appears in more than one split (verified, §3.3), so augmented copies of one photograph did not leak between training and validation. This rests on filenames being faithful to the original photographs</td>
+</tr>
+<tr>
+<td>Test split has 7 images</td>
+<td>Test-split metrics have wide uncertainty and cannot support strong claims</td>
+</tr>
+<tr>
+<td>No plate-text ground truth</td>
+<td>OCR accuracy, and therefore the true rate of correct end-to-end matches, is unknown</td>
+</tr>
+<tr>
+<td>No recorded <code>STOLEN</code> alert from a live run</td>
+<td>Latency and the full alert path are not established</td>
+</tr>
+<tr>
+<td>Single machine and camera</td>
+<td>Performance on other hardware is unknown; CPU-only operation falls behind the stream</td>
+</tr>
+<tr>
+<td>Fuzzy threshold not tuned on live data</td>
+<td>The value 0.75 could merge different plates that differ by one or two characters</td>
+</tr>
+<tr>
+<td>Plate crops are pre-processed the same way in all lighting</td>
+<td>Night-time and glare performance is unknown</td>
+</tr>
+</tbody>
+</table>
+<h2>7.6 Chapter Summary</h2>
+<p>The measured results support the detector's suitability for a precision-first police use case. Reading accuracy and live performance remain unmeasured, and the report states this instead of extrapolating. The main contribution is a decoupled, tested pipeline with a locally trained model.</p><h1>Chapter 8: Conclusion and Recommendations</h1>
+<h2>8.1 Introduction</h2>
+<p>This chapter summarises the project, states the conclusions the evidence supports, reviews the individual objectives, and gives recommendations and future work.</p>
+<h2>8.2 Summary of the Project</h2>
+<p>Stolen-vehicle recovery in Zambia relies on officers chancing to recognise a plate. The group built SVDS on top of the VRRS registry so that a plate seen by a camera is checked automatically against active reports. This report covered the AI/vision component. A single-class YOLOv8n detector was fine-tuned on 1,890 labelled images of Zambian plates, and a camera node was built around it. The node samples a phone video stream, crops and pre-processes detected plates, reads them with EasyOCR, validates the text, suppresses noisy duplicate reads by fuzzy matching, and reports each reading to the backend over one HTTP endpoint.</p>
+<h2>8.3 Conclusions</h2>
+<ol>
+<li>A small, locally collected dataset is enough to train a plate detector with high precision (0.990) and moderate recall (0.752) on the validation split, at about 11 ms per image on a Quadro P2000.</li>
+<li>OCR noise, not detection, was the main practical problem on live footage. A fuzzy similarity check handles it, and unit tests confirm the behaviour.</li>
+<li>A decoupled node that talks to the backend over one HTTP contract works: live readings from a phone stream reached the backend and were answered.</li>
+<li>The evidence does not yet show end-to-end read accuracy, alert latency, or a recorded <code>STOLEN</code> alert from a live run. The test split (7 images) is too small to support strong claims.</li>
+</ol>
+<h2>8.4 Achievement of Objectives</h2>
+<table>
+<thead>
+<tr>
+<th>Objective</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>O1 Dataset</td>
+<td>Achieved (original photograph count to be confirmed)</td>
+</tr>
+<tr>
+<td>O2 Detector above 0.95 precision and 0.75 mAP50</td>
+<td>Achieved (0.990 / 0.797)</td>
+</tr>
+<tr>
+<td>O3 OCR and validation</td>
+<td>Achieved in implementation; read accuracy unmeasured</td>
+</tr>
+<tr>
+<td>O4 Duplicate suppression</td>
+<td>Achieved at unit level; not measured on live footage</td>
+</tr>
+<tr>
+<td>O5 Decoupled node</td>
+<td>Largely achieved; live reporting shown, alert path and reconnection not shown</td>
+</tr>
+<tr>
+<td>O6 Evaluation</td>
+<td>Achieved for the model and pure logic, not the whole pipeline</td>
+</tr>
+</tbody>
+</table>
+<p>Research question 1 is answered for detection and left open for reading accuracy. Research question 2 is answered yes.</p>
+<h2>8.5 Recommendations</h2>
+<ul>
+<li>Before any field use, build a labelled set of plate crops with typed text and measure OCR accuracy.</li>
+<li>Enlarge the test split and include night, glare, motion blur and angled shots.</li>
+<li>Put <code>/alerts/check-plate</code> behind a private network or an API key.</li>
+<li>Keep a human officer in the loop: treat every alert as a lead, never as proof.</li>
+<li>Confirm the licences of YOLOv8 (AGPL-3.0), EasyOCR and the dataset before any deployment beyond a prototype.</li>
+</ul>
+<h2>8.6 Future Work</h2>
+<ul>
+<li>Record a full live run that produces a <code>STOLEN</code> alert, and measure latency.</li>
+<li>Tune the fuzzy threshold on labelled live readings.</li>
+<li>Evaluate the pre-processing stage and alternative OCR engines.</li>
+<li>Read GPS location from the phone instead of a configured string.</li>
+<li>Export the model to ONNX or TensorRT to reduce GPU dependence, and support several camera nodes.</li>
+<li>Discover the phone stream address automatically instead of editing <code>.env</code>.</li>
+</ul><h1>References</h1>
+<ol>
+<li>Ultralytics. "YOLOv8 Documentation." https://docs.ultralytics.com (accessed 2026).</li>
+<li>JaidedAI. "EasyOCR." https://github.com/JaidedAI/EasyOCR (accessed 2026).</li>
+<li>Roboflow. "zambia-number-plate-detection, version 3" (workspace nicholass-workspace-j3yig), CC BY 4.0. https://universe.roboflow.com/nicholass-workspace-j3yig/zambia-number-plate-detection/dataset/3</li>
+<li>OpenALPR. "OpenALPR: Open Source Automatic License Plate Recognition." https://github.com/openalpr/openalpr</li>
+<li>Plate Recognizer. "Plate Recognizer ALPR." https://platerecognizer.com</li>
+<li>Bradski, G. (2000). The OpenCV Library. Dr. Dobb's Journal of Software Tools. https://opencv.org</li>
+<li>Otsu, N. (1979). A threshold selection method from gray-level histograms. IEEE Transactions on Systems, Man, and Cybernetics, 9(1), 62-66.</li>
+<li>Redmon, J., Divvala, S., Girshick, R., Farhadi, A. (2016). You Only Look Once: Unified, Real-Time Object Detection. CVPR 2016.</li>
+<li>Python Software Foundation. "difflib: Helpers for computing deltas." https://docs.python.org/3/library/difflib.html</li>
+<li>FastAPI. "FastAPI Documentation." https://fastapi.tiangolo.com</li>
+<li>pytest. "pytest Documentation." https://docs.pytest.org</li>
+<li>Sommerville, I. (2011). Software Engineering, 9th ed. Pearson.</li>
+</ol>
+<p><span class="todo">[Add any interviews, Zambia Police Service correspondence or supervisor notes you used, and format all entries to the department's required style.]</span></p><h1>Appendix A: Individual Contribution Statement (Group Projects)</h1>
+<h2>Purpose of this Statement</h2>
+<p>This statement identifies the work for which the student was primarily responsible. It is consistent with the main report. Work by other group members is acknowledged and is not claimed.</p>
+<h2>A.1 Project and Group Information</h2>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Details</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Project Title</td>
+<td>SVDS: A Camera-Based Stolen Vehicle Detection System for the Zambia Police Service (built on the VRRS registry)</td>
+</tr>
+<tr>
+<td>Student Name</td>
+<td>Moomba Nicholas Katapazi</td>
+</tr>
+<tr>
+<td>Computer Number</td>
+<td>[COMPUTER NUMBER]</td>
+</tr>
+<tr>
+<td>Supervisor</td>
+<td>[SUPERVISOR NAME]</td>
+</tr>
+<tr>
+<td>Group Size</td>
+<td>4</td>
+</tr>
+<tr>
+<td>Group Members</td>
+<td>1. Moomba Nicholas Katapazi, [COMPUTER NUMBER] (AI/vision)<br/>2. [NAME], [COMPUTER NUMBER] (Backend and security)<br/>3. [NAME], [COMPUTER NUMBER] (Real-time and integration)<br/>4. [NAME], [COMPUTER NUMBER] (Frontend, analytics, testing and documentation)</td>
+</tr>
+</tbody>
+</table>
+<h2>A.2 Overall Group Project</h2>
+<p>The group built <strong>SVDS/VRRS</strong>, a system with which the public files stolen-vehicle reports and police officers are alerted automatically when a camera sees a reported vehicle. It has three independently running processes: a FastAPI and PostgreSQL backend, a React frontend with three role-based portals (Reportee, Police, Admin), and a camera node that reads number plates from a phone's video stream using a custom-trained YOLOv8 detector and OCR. The common problem is that stolen-vehicle recovery depends on officers chancing to recognise a plate. The system's core flow is: camera node reads a plate, the backend matches it against active reports, and connected police dashboards receive an alert over WebSocket.</p>
+<h2>A.3 Individual Role and Responsibilities</h2>
+<p>The group's work was divided into four roles. The student's role was <strong>Role 1: AI/vision</strong>, which covers work areas 1 (detection model) and 2 (camera node).</p>
+<table>
+<thead>
+<tr>
+<th>No.</th>
+<th>Area of Responsibility</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Detection model (AI)</td>
+<td>Collect and label Zambian plate images, train YOLOv8n to find the plate, evaluate it</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Camera node (edge)</td>
+<td>Read the phone video stream, run detection and OCR, clean and validate the text, drop duplicate reads, send results to the backend</td>
+</tr>
+</tbody>
+</table>
+<p>Other roles, for reference: <strong>Role 2</strong> backend API, database, <code>check-plate</code> logic, JWT, bcrypt, role enforcement, user management and audit log; <strong>Role 3</strong> WebSocket alerts, camera status and live-feed proxy, system health, and the phone-to-server wiring; <strong>Role 4</strong> the React portals, analytics, integration tests, run scripts and documentation.</p>
+<h2>A.4 Detailed Individual Contribution</h2>
+<ul>
+<li><strong>Data collection and annotation:</strong> collected Zambian plate images with a phone camera; annotated them in Roboflow with one class; exported in YOLOv8 format with the recorded pre-processing and augmentation.</li>
+<li><strong>Model development:</strong> trained YOLOv8n from COCO-pretrained weights on GPU; compared runs; selected the weights used by the node (<code>svds-plate-detector-final-2/weights/best.pt</code>).</li>
+<li><strong>Algorithm development:</strong> designed the read-and-report pipeline (frame sampling, crop, greyscale, 4× upscale, Otsu threshold, EasyOCR with allowlist, confidence floor, regex validation) and the fuzzy duplicate-suppression algorithm.</li>
+<li><strong>Software development:</strong> wrote <code>vrrs-node/plate_node.py</code> and <code>vrrs-node/plate_utils.py</code>.</li>
+<li><strong>Testing:</strong> wrote the eight unit tests for the node's pure logic and evaluated the detector.</li>
+<li><strong>Deployment and configuration:</strong> set up the GPU Python environment and resolved the OpenMP, Visual C++ runtime and OpenCV package conflicts.</li>
+<li><strong>Documentation:</strong> this report's AI/vision material, including the detection chapter content and the node's <code>.env</code> documentation.</li>
+</ul>
+<h2>A.5 Individual Deliverables</h2>
+<table>
+<thead>
+<tr>
+<th>No.</th>
+<th>Deliverable</th>
+<th>Student's Contribution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Annotated dataset (<code>zambia-number-plate-detection</code>, v3)</td>
+<td>Collected, annotated, exported</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Trained detector <code>best.pt</code> and its training record (<code>args.yaml</code>, <code>results.csv</code>, curves)</td>
+<td>Trained, evaluated, selected</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Camera node <code>plate_node.py</code></td>
+<td>Designed and implemented</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>plate_utils.py</code> with 8 unit tests</td>
+<td>Designed, implemented, tested</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Node configuration (<code>.env</code> keys) and set-up instructions</td>
+<td>Defined and documented</td>
+</tr>
+</tbody>
+</table>
+<h2>A.6 Contribution to the Main System or Research Output</h2>
+<p>The student produced the component that turns camera video into plate strings. It is the input to the backend's <code>POST /alerts/check-plate</code> endpoint. The endpoint itself, the matching against reports and the storage of alerts were built by the backend member. The alert broadcast and camera status display were built by the real-time and integration member. The pages that show the results were built by the frontend member. The <code>check-plate</code> contract (§4.6) was agreed jointly between the node and the backend.</p>
+<h2>A.7 Individual Implementation and Technical Work</h2>
+<p>Modules and components implemented by the student: the plate dataset and <code>data.yaml</code>; the trained YOLOv8n detector; <code>plate_node.py</code> (stream capture and reconnection, frame sampling, detector inference, crop pre-processing, OCR call, reporting to the backend, preview window); <code>plate_utils.py</code> (<code>clean_plate_text</code>, <code>is_recent_duplicate</code>); <code>tests/test_plate_utils.py</code>. Datasets and experiments handled: the Roboflow export (1,890 images), the 100-epoch training run, and the validation and test-split evaluations in Chapter 6.</p>
+<h2>A.8 Individual Testing and Evaluation Contribution</h2>
+<p>The student designed and ran the node unit tests (8 of 8 passing) and the detector evaluations reported in Chapter 6, and wrote the analysis in Chapters 6 and 7. The backend <code>pytest</code> suite and the manual browser checks of the web application were carried out by other members and are not claimed here.</p>
+<h2>A.9 Collaboration with Other Group Members</h2>
+<ul>
+<li>The node depends on the <strong>backend member's</strong> <code>check-plate</code> endpoint: its request format and its <code>CLEAR</code>/<code>STOLEN</code> response were agreed jointly. The backend's plate normalisation means the node does not have to reproduce the backend's matching rules.</li>
+<li>The <strong>real-time and integration member's</strong> alert broadcast and camera status/feed proxy depend on the node's <code>CAMERA_ID</code> and on the phone stream address, which both share.</li>
+<li>The <strong>frontend member's</strong> pages display the node's detections and status.</li>
+</ul>
+<h2>A.10 Contribution Summary</h2>
+<ol>
+<li><strong>Work primarily completed by the student:</strong> the dataset, the trained detector, the camera node, the plate utilities and their tests.</li>
+<li><strong>Work completed jointly with other members:</strong> the node-to-backend contract; shared configuration of the phone stream address; end-to-end start-up through <code>run-all.ps1</code>.</li>
+<li><strong>Work primarily completed by other members and used here:</strong> the backend, database and <code>check-plate</code> matching; authentication and access control; the WebSocket alert delivery; the web portals.</li>
+</ol>
+<h2>A.11 Estimated Contribution</h2>
+<p><em>The percentages below are the student's own estimate and must be completed by the student. They were not derived from any record.</em></p>
+<table>
+<thead>
+<tr>
+<th>Project Activity</th>
+<th>Individual Contribution</th>
+<th>Collaborative Contribution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Problem Analysis</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+<tr>
+<td>Literature Review</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+<tr>
+<td>Requirements Analysis</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+<tr>
+<td>System/Research Design</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+<tr>
+<td>Implementation / Development</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+<tr>
+<td>Testing and Evaluation</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+<tr>
+<td>Documentation</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+<tr>
+<td>Other</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+</tbody>
+</table>
+<h2>A.12 Statement of Authorship and Contribution</h2>
+<p>I confirm that the contribution described in this statement accurately represents the work that I personally undertook as part of the group project. I have identified collaborative work and have not knowingly claimed the work of another group member as my own.</p>
+<p><strong>Student Name:</strong> Moomba Nicholas Katapazi
+<strong>Computer Number:</strong> <strong><em>_</em></strong><strong><em>_</em></strong><strong><em>_</em></strong><em>
+<strong>Signature:</strong> <strong><em>_</em></strong><strong><em>_</em></strong><strong><em>_</em></strong></em>
+<strong>Date:</strong> <strong><em>_</em></strong><strong><em>_</em></strong><strong><em>_</em></strong>_</p>
+<h2>A.13 Supervisor Verification</h2>
+<p>I confirm that, to the best of my knowledge, the contribution described above is consistent with the student's participation in the group project.</p>
+<p><strong>Supervisor Name:</strong> <strong><em>_</em></strong><strong><em>_</em></strong><strong><em>_</em></strong><em>
+<strong>Signature:</strong> <strong><em>_</em></strong><strong><em>_</em></strong><strong><em>_</em></strong></em>
+<strong>Date:</strong> <strong><em>_</em></strong><strong><em>_</em></strong><strong><em>_</em></strong>_</p><h1>Appendix B: User Manual / Installation Guide</h1>
+<p>This guide covers the camera node (the student's component). Set-up of the backend and frontend is documented in the project <code>README.md</code> and in the other members' reports.</p>
+<h2>B.1 Requirements</h2>
+<ul>
+<li>Windows 11 (or another OS with a CUDA-capable GPU setup).</li>
+<li>A Python environment with GPU-enabled <code>torch</code>, <code>ultralytics</code>, <code>easyocr</code>, <code>opencv-python</code> (not the headless build, since the preview window needs GUI support), <code>requests</code>, <code>python-dotenv</code>. The development environment is listed in §5.2.</li>
+<li>The trained weights <code>best.pt</code>.</li>
+<li>An Android phone running an IP Webcam app, on the same network or hotspot as the PC.</li>
+<li>The SVDS backend running and reachable.</li>
+</ul>
+<h2>B.2 Configure</h2>
+<pre><code class="language-bash">cd vrrs-node
+cp .env.example .env
+</code></pre>
+<p>Edit <code>.env</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Meaning</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PHONE_STREAM_URL</code></td>
+<td>Stream address shown by the phone app, with <code>/video</code> appended</td>
+<td><code>http://192.168.1.100:8080/video</code> (example)</td>
+</tr>
+<tr>
+<td><code>BACKEND_URL</code></td>
+<td>Base URL of the SVDS backend</td>
+<td><code>http://127.0.0.1:8000</code></td>
+</tr>
+<tr>
+<td><code>CAMERA_ID</code></td>
+<td>Identifier sent with every reading</td>
+<td><code>PHONE-NODE-1</code></td>
+</tr>
+<tr>
+<td><code>LOCATION_SPOTTED</code></td>
+<td>Location text sent with every reading</td>
+<td><code>Unknown</code></td>
+</tr>
+<tr>
+<td><code>MODEL_PATH</code></td>
+<td>Path to <code>best.pt</code></td>
+<td>see <code>.env.example</code></td>
+</tr>
+<tr>
+<td><code>DETECT_CONF</code></td>
+<td>Detector confidence threshold</td>
+<td>0.4</td>
+</tr>
+<tr>
+<td><code>PROCESS_EVERY_N_FRAMES</code></td>
+<td>Run detection on every Nth frame</td>
+<td>5</td>
+</tr>
+<tr>
+<td><code>RESEND_COOLDOWN_SECONDS</code></td>
+<td>Duplicate-suppression window</td>
+<td>15</td>
+</tr>
+<tr>
+<td><code>DEDUP_SIMILARITY_THRESHOLD</code></td>
+<td>Fuzzy match threshold, 0–1</td>
+<td>0.75</td>
+</tr>
+<tr>
+<td><code>DEVICE</code></td>
+<td><code>cuda</code> or <code>cpu</code></td>
+<td><code>cuda</code></td>
+</tr>
+</tbody>
+</table>
+<p>The phone's address changes when it reconnects, so update <code>PHONE_STREAM_URL</code> each session.</p>
+<h2>B.3 Run</h2>
+<ol>
+<li>Start the IP Webcam app on the phone and tap <strong>Start server</strong>.</li>
+<li>Start the backend.</li>
+<li>From <code>vrrs-node</code>, run <code>python plate_node.py</code> in the GPU environment (or run <code>run-all.ps1</code> from the project root to start all three components).</li>
+<li>Wait about 20–30 seconds while the models load.</li>
+<li>A window titled "SVDS Plate Node" opens. A green box and the plate text appear on detected plates. The console prints <code>[PLATE] backend status: CLEAR</code> or <code>STOLEN</code>.</li>
+<li>Press <code>q</code> in the preview window to quit.</li>
+</ol>
+<h2>B.4 Troubleshooting</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Likely cause</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Could not open video stream</code> at start-up</td>
+<td>Wrong or unreachable <code>PHONE_STREAM_URL</code>; phone app not running; different network</td>
+<td>Check the phone app, network and <code>.env</code></td>
+</tr>
+<tr>
+<td><code>Lost connection to stream, retrying...</code> repeated</td>
+<td>Phone went to sleep or left the network</td>
+<td>Wake the phone, check the network; the node retries automatically</td>
+</tr>
+<tr>
+<td><code>failed to reach backend</code></td>
+<td>Backend not running or wrong <code>BACKEND_URL</code></td>
+<td>Start the backend; detection continues meanwhile</td>
+</tr>
+<tr>
+<td>Crash on start mentioning <code>libiomp5md.dll</code></td>
+<td>Duplicate OpenMP runtimes</td>
+<td>The node sets <code>KMP_DUPLICATE_LIB_OK</code>; make sure it is running the unmodified <code>plate_node.py</code></td>
+</tr>
+<tr>
+<td><code>import torch</code> fails with <code>WinError 126</code></td>
+<td>Damaged Visual C++ runtime</td>
+<td>Repair "Microsoft Visual C++ 2022 X64 Minimum Runtime"</td>
+</tr>
+<tr>
+<td>Preview window fails to open</td>
+<td>Headless OpenCV installed alongside the normal build</td>
+<td>Uninstall <code>opencv-python-headless</code></td>
+</tr>
+</tbody>
+</table>
+<h2>B.5 Run the unit tests</h2>
+<pre><code class="language-bash">cd vrrs-node
+python -m pytest tests/ -v
+</code></pre>
+<p>The tests need only <code>pytest</code>; they do not import <code>torch</code>, <code>cv2</code> or <code>easyocr</code>.</p>
+<hr />
+<h1>Appendix C: Additional System Designs / Diagrams</h1>
+<h2>C.1 Database schema (designed by the backend member)</h2>
+<p>The node's readings end up in the <code>alerts</code> table. The full schema of the four tables is shown for reference.</p>
+<p><img alt="Figure C.1: entity-relationship diagram" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/04-system-design-2.png" /></p>
+<h2>C.2 Authentication sequence (backend member)</h2>
+<p><img alt="Figure C.2: authentication sequence" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/04-system-design-3.png" /></p>
+<h2>C.3 Role-based route access (backend and frontend members)</h2>
+<p><img alt="Figure C.3: role-based route access" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/04-system-design-5.png" /></p>
+<hr />
+<h1>Appendix D: Additional Test Cases and Results</h1>
+<h2>D.1 Raw output of the node unit tests</h2>
+<pre><code>platform win32 -- Python 3.12.10, pytest-9.1.1, pluggy-1.6.0
+rootdir: ...\vrrs-node
+collected 8 items
+
+tests/test_plate_utils.py::test_clean_plate_text_strips_punctuation_and_uppercases PASSED
+tests/test_plate_utils.py::test_clean_plate_text_rejects_too_short_or_too_long PASSED
+tests/test_plate_utils.py::test_clean_plate_text_rejects_non_alphanumeric_only_input PASSED
+tests/test_plate_utils.py::test_exact_repeat_within_cooldown_is_a_duplicate PASSED
+tests/test_plate_utils.py::test_ocr_jitter_variants_are_treated_as_duplicates PASSED
+tests/test_plate_utils.py::test_genuinely_different_plate_is_not_a_duplicate PASSED
+tests/test_plate_utils.py::test_expired_entries_no_longer_count_as_duplicates PASSED
+tests/test_plate_utils.py::test_expired_entries_are_pruned PASSED
+
+============================== 8 passed in 0.06s ==============================
+</code></pre>
+<p>(Run again during the preparation of this report. The original capture is in <code>thesis/assets/test-results/node-pytest-output.txt</code>.)</p>
+<h2>D.2 Further training evidence</h2>
+<p>Figures 6.2 to 6.6 in Chapter 6 are the training and evaluation plots. The precision and recall curves as a function of confidence (<code>BoxP_curve.png</code>, <code>BoxR_curve.png</code>) and the F1 curve (<code>BoxF1_curve.png</code>) are in <code>thesis/assets/detection-model/</code>.</p>
+<p><img alt="Figure D.1: F1 curve" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/detection-model/BoxF1_curve.png" /></p>
+<p><img alt="Figure D.2: normalised confusion matrix" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/detection-model/confusion_matrix_normalized.png" /></p>
+<hr />
+<h1>Appendix E: Data Collection Instruments</h1>
+<p>Not applicable. No questionnaires, interviews or surveys were used. The only data collected were plate photographs, described in §3.3.</p>
+<hr />
+<h1>Appendix F: Additional Code / Configuration</h1>
+<h2>F.1 Configuration template (<code>vrrs-node/.env.example</code>)</h2>
+<pre><code>PHONE_STREAM_URL=http://192.168.1.100:8080/video
+BACKEND_URL=http://127.0.0.1:8000
+CAMERA_ID=PHONE-NODE-1
+LOCATION_SPOTTED=Unknown
+MODEL_PATH=C:\Users\user\runs\detect\svds-plate-detector-final-2\weights\best.pt
+DETECT_CONF=0.4
+PROCESS_EVERY_N_FRAMES=5
+RESEND_COOLDOWN_SECONDS=15
+</code></pre>
+<h2>F.2 Reporting function (<code>vrrs-node/plate_node.py</code>)</h2>
+<pre><code class="language-python">def report_plate(plate: str, confidence: float) -&gt; None:
+    payload = {
+        &quot;license_plate&quot;: plate,
+        &quot;camera_id&quot;: CAMERA_ID,
+        &quot;confidence_score&quot;: confidence,
+        &quot;location_spotted&quot;: LOCATION_SPOTTED,
+    }
+    try:
+        resp = requests.post(f&quot;{BACKEND_URL}/alerts/check-plate&quot;, json=payload, timeout=5)
+        resp.raise_for_status()
+        print(f&quot;[{plate}] backend status: {resp.json().get('status')}&quot;)
+    except requests.RequestException as e:
+        print(f&quot;[{plate}] failed to reach backend: {e}&quot;)
+</code></pre>
+<h2>F.3 Stream loss recovery (<code>vrrs-node/plate_node.py</code>)</h2>
+<pre><code class="language-python">ok, frame = cap.read()
+if not ok:
+    print(&quot;Lost connection to stream, retrying...&quot;)
+    time.sleep(1)
+    cap.release()
+    cap = cv2.VideoCapture(STREAM_URL)
+    continue
+</code></pre>
+<hr />
+<h1>Appendix G: Other Supporting Material</h1>
+<h2>G.1 Group role split</h2>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Work areas</th>
+<th>Focus</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1. AI/vision</td>
+<td>Detection model; camera node</td>
+<td>This report</td>
+</tr>
+<tr>
+<td>2. Backend</td>
+<td>Backend API and database; security and access control</td>
+<td>FastAPI, PostgreSQL, <code>/alerts/check-plate</code>, JWT, bcrypt, roles, audit log</td>
+</tr>
+<tr>
+<td>3. Real-time and integration</td>
+<td>Real-time alerts and monitoring; phone-to-server wiring</td>
+<td>WebSocket, camera status, live-feed proxy, system health</td>
+</tr>
+<tr>
+<td>4. Frontend</td>
+<td>Frontend portals; analytics, testing and documentation</td>
+<td>React pages, analytics, run scripts</td>
+</tr>
+</tbody>
+</table>
+<h2>G.2 Source locations</h2>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Path</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Camera node</td>
+<td><code>vrrs-node/plate_node.py</code>, <code>vrrs-node/plate_utils.py</code>, <code>vrrs-node/tests/</code></td>
+</tr>
+<tr>
+<td>Trained weights</td>
+<td><code>runs/detect/svds-plate-detector-final-2/weights/best.pt</code></td>
+</tr>
+<tr>
+<td>Training record</td>
+<td><code>thesis/assets/detection-model/</code> (<code>args.yaml</code>, <code>results.csv</code>, plots)</td>
+</tr>
+<tr>
+<td>Dataset metadata</td>
+<td><code>thesis/assets/dataset/</code> (<code>data.yaml</code>, Roboflow README)</td>
+</tr>
+<tr>
+<td>Evaluation script and outputs</td>
+<td><code>thesis/report-2026/assets/</code></td>
+</tr>
+</tbody>
+</table>
+</body></html>

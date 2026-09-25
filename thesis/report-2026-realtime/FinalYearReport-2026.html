@@ -1,0 +1,1823 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>Final Year Project Report 2026</title>
+<style>
+  @page { size: A4; margin: 2.5cm; }
+  body { font-family: 'Times New Roman', serif; font-size: 12pt; line-height: 1.5; color: #000; max-width: 210mm; margin: 0 auto; }
+  h1 { font-size: 20pt; text-align: center; page-break-before: always; margin-top: 0; }
+  h2 { font-size: 15pt; margin-top: 1.4em; }
+  h3 { font-size: 13pt; margin-top: 1.1em; }
+  p, li { text-align: justify; }
+  code { font-family: Consolas, 'Courier New', monospace; font-size: 10pt; }
+  pre { background: #f5f5f5; border: 1px solid #ddd; padding: 8px; font-size: 9pt; white-space: pre-wrap; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 10.5pt; }
+  th, td { border-top: 1px solid #444; border-bottom: 1px solid #444; padding: 4px 8px; text-align: left; vertical-align: top; }
+  th { background: #efefef; }
+  img { max-width: 100%; display: block; margin: 0.8em auto; }
+  .cover { text-align: center; page-break-after: always; }
+  .cover h2, .cover h3 { text-align: center; }
+  .plain-title { font-size: 20pt; font-weight: bold; text-align: center; page-break-before: always; margin: 1em 0; }
+  .sig { margin: 1.4em 0; } .sig span { display: inline-block; border-bottom: 1px solid #000; width: 60%; }
+  .center { text-align: center; }
+  .todo { background: #fff3b0; }
+</style>
+</head><body>
+
+<div class="cover">
+<h3>THE UNIVERSITY OF ZAMBIA</h3>
+<h3>SCHOOL OF NATURAL AND APPLIED SCIENCES</h3>
+<h3>DEPARTMENT OF COMPUTING AND INFORMATICS</h3>
+<br/><br/>
+<h2>FINAL YEAR PROJECT REPORT</h2>
+<h3>ACADEMIC YEAR 2026</h3>
+<br/><br/>
+<h1 style="page-break-before:avoid">SVDS: A Camera-Based Stolen Vehicle Detection System for the Zambia Police Service &mdash; Real-Time Alerts, Monitoring and System Integration</h1>
+<br/>
+<p class="center">A Final Year Project Report Submitted to the<br/>Department of Computing and Informatics<br/>in partial fulfilment of the requirements for the award of</p>
+<p class="center"><b>[DEGREE PROGRAMME &mdash; confirm]</b></p>
+<br/><br/>
+<p class="center"><b>Student Name:</b> [STUDENT NAME &mdash; Role 3: Real-time and Integration]<br/>
+<b>Computer Number:</b> [COMPUTER NUMBER]<br/>
+<b>Supervisor:</b> [SUPERVISOR NAME]<br/>
+<b>Date of Submission:</b> [DATE OF SUBMISSION]</p>
+</div>
+
+<div class="plain-title">DECLARATION</div>
+<p>I declare that this final year project report is my own work and has been prepared in accordance with the academic requirements of the University of Zambia. All sources of information, ideas, data, software, images, and other material that are not my own have been appropriately acknowledged and referenced.</p>
+<p>Where this project was undertaken as part of a group, I have clearly identified my individual contributions and have not presented the work of other group members as my own.</p>
+<p class="sig"><b>Student Name:</b> [STUDENT NAME &mdash; Role 3: Real-time and Integration]</p>
+<p class="sig"><b>Computer Number:</b> <span>&nbsp;</span></p><p class="sig"><b>Signature:</b> <span>&nbsp;</span></p><p class="sig"><b>Date:</b> <span>&nbsp;</span></p>
+
+<div class="plain-title">APPROVAL</div>
+<p>This final year project report has been submitted for examination with the approval of the project supervisor.</p>
+<p class="sig"><b>Supervisor Name:</b> <span>&nbsp;</span></p><p class="sig"><b>Signature:</b> <span>&nbsp;</span></p><p class="sig"><b>Date:</b> <span>&nbsp;</span></p><p class="sig"><b>Departmental/Examiner Approval (if applicable):</b> <span>&nbsp;</span></p>
+<div class="plain-title">ABSTRACT</div>
+
+<p>Stolen-vehicle recovery in Zambia depends largely on police officers chancing to recognise a plate number from a paper report or radio bulletin. This project, carried out by a group of four students, built SVDS, a Stolen Vehicle Detection System on top of the VRRS vehicle registry. The public files stolen-vehicle reports through a web application, and a camera node reads plates from a phone's video stream and checks them against active reports, so connected police officers are alerted in real time.</p>
+<p>This individual report covers the real-time and integration component. A WebSocket channel pushes a detection to every connected police and admin client, whichever page the officer is on, using the same token as the rest of the API. An authenticated proxy relays the phone's live video feed to the browser without exposing the phone's address. Camera-status and system-health endpoints show whether the camera and platform are working, and a start-up script and a written configuration contract let the backend, front end and camera node run as one system.</p>
+<p>The component was tested in process with the framework's WebSocket test client, a local stand-in camera and failure-mode probes. Thirteen test cases passed: a match reached every connected client, reportee, missing and invalid tokens were refused with code 1008, a dead connection did not block the others, and the feed proxy and camera status behaved correctly for reachable and unreachable cameras. The in-process delivery time was about 17 ms, but this excludes the network, camera pipeline and browser and is not an end-to-end latency. The probes and code review found fourteen weaknesses, including that the browser never reconnects after a dropped connection, that a deactivated user's token still opens the alert channel, and that the health endpoint is unauthenticated and partly made of fixed values. None has been fixed in this project, and no live stolen-vehicle alert from a real vehicle was recorded.</p>
+<p><strong>Keywords:</strong> WebSocket; real-time alerts; MJPEG streaming; system monitoring; system integration</p>
+<p><strong>Note on the version of the code evaluated.</strong> All findings, test counts, coverage figures and line counts in this report were obtained against the code as committed (commit <code>a349fc6</code>). After that evaluation, uncommitted changes appeared in the working tree (<code>middleware.py</code>, <code>alerts.py</code>, <code>system.py</code>, <code>main.py</code>, <code>api.js</code>, <code>SystemHealth.jsx</code>, <code>conftest.py</code>, a new <code>tests/test_regressions.py</code> and a new front-end test). With those changes the backend suite has <strong>38 tests, all passing</strong>, and the front end has <strong>one</strong> test (<code>npm test</code>), which also passes. The changes appear to address the items listed below; this was established by reading the changes and running the tests, and the original probes were <strong>not</strong> re-run against the changed code. Where this report says a finding was "not fixed", it refers to the evaluated commit.</p>
+<p><em>Appear addressed in the working tree:</em> <strong>R-2</strong> (the WebSocket re-checks the account on connect and on every message, including the heartbeat, and the feed proxy checks the account; the feed now answers a wrong role with 403 instead of 401, so TC-R9 would now expect 403), <strong>R-9</strong> (the ping timer is cleared on close), and the health page's database-connection card, which now shows "N/A" when the pool cannot report counts (not one of the listed findings). The changes also make the browser ignore the server's <code>pong</code> reply; before this, the original client would have failed to parse it as JSON, a defect this report did not identify. <em>Still open as far as the changes show:</em> R-1 (health endpoint still needs no login), R-3, R-5 to R-8, R-10 to R-13 (including the browser never reconnecting).</p>
+<div class="plain-title">ACKNOWLEDGEMENTS</div>
+
+<p><span class="todo">[Write acknowledgements here: supervisor, group members (AI/vision, backend and security, frontend), family, and anyone who helped collect plate images. The author must write this; it is personal.]</span></p>
+<div class="plain-title">CONTENTS</div>
+
+<p><strong>Preliminary pages:</strong> Declaration · Approval · Abstract · Acknowledgements · List of Abbreviations and Acronyms · Note on Group Projects</p>
+<p><strong>1 Introduction</strong> — 1.1 Background and Context · 1.2 Problem Statement · 1.3 Project Aim · 1.4 Project Objectives · 1.5 Research Questions · 1.6 Scope of the Project (In Scope, Out of Scope) · 1.7 Significance · 1.8 Limitations · 1.9 Organisation of the Report</p>
+<p><strong>2 Literature Review</strong> — 2.1 Introduction · 2.2 Key Concepts and Theories · 2.3 Existing Systems / Related Work · 2.4 Comparative Analysis · 2.5 Research / Knowledge Gap · 2.6 Conceptual Framework · 2.7 Chapter Summary</p>
+<p><strong>3 Methodology</strong> — 3.1 Introduction · 3.2 Research / Development Approach · 3.3 Requirements / Data Collection · 3.4 System Architecture / Research Workflow · 3.5 Tools and Technologies · 3.6 Ethical and Legal Considerations · 3.7 Evaluation Method · 3.8 Chapter Summary</p>
+<p><strong>4 System Analysis and Design</strong> — 4.1 Introduction · 4.2 Stakeholder and User Analysis · 4.3 Functional Requirements · 4.4 Non-Functional Requirements · 4.5 Use Cases / User Stories · 4.6 System / Solution Architecture · 4.7 Database / Data Design · 4.8 Interface / Interaction Design · 4.9 Algorithms / Models / Technical Design · 4.10 Chapter Summary</p>
+<p><strong>5 Implementation / Development</strong> — 5.1 Introduction · 5.2 Development Environment · 5.3 System Components / Modules · 5.4 Key Implementation Details · 5.5 Integration · 5.6 Challenges and Solutions · 5.7 Individual Contribution · 5.8 Chapter Summary</p>
+<p><strong>6 Testing, Results and Evaluation</strong> — 6.1 Introduction · 6.2 Testing Strategy · 6.3 Test Cases and Results · 6.4 Experimental / Performance Results · 6.5 User Evaluation · 6.6 Analysis of Results · 6.7 Objective-by-Objective Evaluation · 6.8 Individual Results · 6.9 Chapter Summary</p>
+<p><strong>7 Discussion</strong> — 7.1 Introduction · 7.2 Interpretation of Findings · 7.3 Comparison with Existing Work · 7.4 Contributions of the Project · 7.5 Limitations and Implications · 7.6 Chapter Summary</p>
+<p><strong>8 Conclusion and Recommendations</strong> — 8.1 Introduction · 8.2 Summary of the Project · 8.3 Conclusions · 8.4 Achievement of Objectives · 8.5 Recommendations · 8.6 Future Work</p>
+<p><strong>References</strong></p>
+<p><strong>Appendices</strong> — A Individual Contribution Statement · B User Manual / Installation Guide · C Additional System Designs / Diagrams · D Additional Test Cases and Results · E Data Collection Instruments · F Additional Code / Configuration · G Other Supporting Material</p>
+<p><span class="todo">[Page numbers are not shown here. In Word, apply heading styles and use References → Table of Contents to generate a numbered contents page, and a List of Figures and List of Tables the same way.]</span></p>
+<div class="plain-title">LIST OF ABBREVIATIONS AND ACRONYMS</div>
+
+<table>
+<thead>
+<tr>
+<th>Abbreviation</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ALPR</td>
+<td>Automatic Licence Plate Recognition</td>
+</tr>
+<tr>
+<td>API</td>
+<td>Application Programming Interface</td>
+</tr>
+<tr>
+<td>CUDA</td>
+<td>Compute Unified Device Architecture (NVIDIA GPU computing platform)</td>
+</tr>
+<tr>
+<td>RFC</td>
+<td>Request for Comments (IETF standard document)</td>
+</tr>
+<tr>
+<td>WS</td>
+<td>WebSocket</td>
+</tr>
+<tr>
+<td>DBMS</td>
+<td>Database Management System</td>
+</tr>
+<tr>
+<td>GPU</td>
+<td>Graphics Processing Unit</td>
+</tr>
+<tr>
+<td>HTTP</td>
+<td>Hypertext Transfer Protocol</td>
+</tr>
+<tr>
+<td>IoU</td>
+<td>Intersection over Union</td>
+</tr>
+<tr>
+<td>JWT</td>
+<td>JSON Web Token</td>
+</tr>
+<tr>
+<td>mAP</td>
+<td>mean Average Precision</td>
+</tr>
+<tr>
+<td>MJPEG</td>
+<td>Motion JPEG (video stream format)</td>
+</tr>
+<tr>
+<td>ML</td>
+<td>Machine Learning</td>
+</tr>
+<tr>
+<td>OCR</td>
+<td>Optical Character Recognition</td>
+</tr>
+<tr>
+<td>SVDS</td>
+<td>Stolen Vehicle Detection System</td>
+</tr>
+<tr>
+<td>UI</td>
+<td>User Interface</td>
+</tr>
+<tr>
+<td>VRRS</td>
+<td>Vehicle Registry and Reporting System</td>
+</tr>
+<tr>
+<td>YOLO</td>
+<td>You Only Look Once (object detector family)</td>
+</tr>
+</tbody>
+</table>
+<div class="plain-title">NOTE ON GROUP PROJECTS</div>
+
+<p>Students who worked on a project as a group are strongly encouraged to prepare their own individual final reports rather than submitting identical reports. The project, system, dataset, or overall research problem may be shared, but each student's report should clearly demonstrate that student's own understanding, responsibilities, work, results, and contribution to the project.</p>
+<p>In particular, group-project students should:</p>
+<ul>
+<li>state the overall group project and explain how the individual work fits within it;</li>
+<li>clearly identify their own responsibilities and deliverables;</li>
+<li>focus detailed analysis, design, implementation, experiments, testing, and/or evaluation on their own contribution;</li>
+<li>acknowledge the work completed by other group members where it is discussed;</li>
+<li>include an <em>Individual Contribution Statement</em> in the appendices; and</li>
+<li>not claim another group member's work, results, code, data collection, or design decisions as their own.</li>
+</ul><h1>Chapter 1: Introduction</h1>
+<h2>1.1 Background and Context</h2>
+<p>Vehicle theft is a persistent problem for law enforcement in Zambia. Recovering a stolen vehicle depends heavily on chance: an officer happens to recognise a plate number from a paper report or a radio bulletin. Reports are kept on paper or in disconnected spreadsheets, so a report filed at one station is invisible to an officer elsewhere.</p>
+<p>This report describes <strong>SVDS</strong>, the Stolen Vehicle Detection System, built by a group of four students on top of the <strong>VRRS</strong> registry. The public files stolen-vehicle reports through a web application. A camera node reads plates from a phone's video stream and asks the backend whether each plate belongs to an active report. When it does, connected police officers must find out <em>immediately</em>, whichever page they are looking at.</p>
+<p>Getting that information from the moment of detection to an officer's screen, and letting the operators see whether the camera and the system are healthy, is the job of the <strong>real-time and integration</strong> component. It also covers the wiring that lets three separately run programs (backend, front end, camera node) behave as one system. This is the individual report of the student responsible for it.</p>
+<h2>1.2 Problem Statement</h2>
+<p>A detection is only useful if someone acts on it. If an alert reaches the police dashboard late, or not at all, the vehicle is gone. Three problems follow:</p>
+<ol>
+<li><strong>Delivery.</strong> How does a detection made by a camera process reach every logged-in officer within moments, without the officer refreshing a page, and without unauthorised users receiving it?</li>
+<li><strong>Visibility.</strong> How do officers and administrators know the camera is working, see what it sees, and know whether the platform itself is healthy?</li>
+<li><strong>Integration.</strong> How are a camera process, a web server and a browser application, developed separately, configured and started so that they work together reliably?</li>
+</ol>
+<h2>1.3 Project Aim</h2>
+<p><strong>Group aim.</strong> To design, implement and evaluate SVDS: a vehicle registry and reporting web application integrated with a real-time, camera-based licence plate detection pipeline, for the Zambia Police Service and the public it serves.</p>
+<p><strong>Individual aim (Real-time and integration).</strong> To build and evaluate the WebSocket alert channel, the camera status and live-feed services, the system-health endpoint, and the integration between the camera node, backend and front end.</p>
+<h2>1.4 Project Objectives</h2>
+<h3>Group objectives</h3>
+<ol>
+<li>Role-based accounts (Reportee, Police, Admin) with scoped access.</li>
+<li>Public filing and tracking of stolen-vehicle reports.</li>
+<li>A live view of alerts, the registry and analytics for police.</li>
+<li>Administrator control of accounts, system health and the audit trail.</li>
+<li>Detection and reading of plates from a live camera feed, matched against active reports.</li>
+<li>Real-time alerts to connected police clients.</li>
+</ol>
+<h3>Individual objectives (Real-time and integration)</h3>
+<table>
+<thead>
+<tr>
+<th>No.</th>
+<th>Objective</th>
+<th>Measure of success</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R1</td>
+<td>Push a detection to all connected police and admin clients as it happens</td>
+<td>A connected client receives a message after <code>check-plate</code> matches, without polling</td>
+</tr>
+<tr>
+<td>R2</td>
+<td>Restrict the alert channel to police and admin</td>
+<td>Connections without a valid police or admin token are refused</td>
+</tr>
+<tr>
+<td>R3</td>
+<td>Report the camera's status and detection statistics</td>
+<td>An endpoint returns online or offline and counts for the configured node</td>
+</tr>
+<tr>
+<td>R4</td>
+<td>Let officers watch the camera feed in the browser without exposing the camera's address</td>
+<td>An authenticated proxy streams the feed; unauthorised requests are refused</td>
+</tr>
+<tr>
+<td>R5</td>
+<td>Provide a system-health endpoint for administrators</td>
+<td>Metrics for database, disk, camera and users are returned</td>
+</tr>
+<tr>
+<td>R6</td>
+<td>Integrate the three processes through documented contracts and a start-up script</td>
+<td>One command starts all three; contracts are written down</td>
+</tr>
+<tr>
+<td>R7</td>
+<td>Verify the real-time path and record its weaknesses honestly</td>
+<td>Tests or probes for each objective; findings documented</td>
+</tr>
+</tbody>
+</table>
+<h2>1.5 Research Questions</h2>
+<ol>
+<li>Can a plain WebSocket channel, authenticated with the same token as the rest of the API, deliver detections to all connected officers with no polling?</li>
+<li>Can the three processes be integrated using only network contracts, so that none needs the others' code?</li>
+<li>What breaks, or could break, in this real-time design, and which of those weaknesses can be demonstrated?</li>
+</ol>
+<p>(Whether the alert is <em>faster than the manual process it replaces</em> is not answered: no manual-process timing was collected, and no latency across a real network and browser was measured.)</p>
+<h2>1.6 Scope of the Project</h2>
+<h3>1.6.1 In Scope</h3>
+<ul>
+<li><strong>This report:</strong> the WebSocket manager and endpoint, the <code>check-plate</code> broadcast call, camera status, the authenticated live-feed proxy, the system-health endpoint, the front end's alert connection and toast notification, the camera-status and system-health pages' use of these services, <code>run-all.ps1</code>, and the configuration that ties the phone's address into the camera node and backend.</li>
+<li><strong>Group:</strong> the whole system.</li>
+</ul>
+<h3>1.6.2 Out of Scope</h3>
+<ul>
+<li>The detection model and camera node (AI/vision member).</li>
+<li>Accounts, roles, reports, matching logic and the database (backend member).</li>
+<li>The visual design of the pages and the analytics charts (frontend member).</li>
+<li>Production hosting, TLS, and running more than one server process.</li>
+</ul>
+<h2>1.7 Significance of the Project</h2>
+<p>The real-time channel is what turns a passive registry into an alerting system. For the Zambia Police Service it means an officer on any page is told about a sighting as it is recorded. For the group it is the seam where three programs meet, and getting that seam right is what lets each member work independently. The report also documents where the current design would fail an officer, which matters more here than in a normal web page because a silent failure means a missed vehicle.</p>
+<h2>1.8 Limitations</h2>
+<ul>
+<li><strong>No real network or browser measurement.</strong> The real-time tests ran in one process using the framework's test client. The 17 ms figure reported in Chapter 6 excludes the network, the phone, video decoding, detection, OCR and the browser, and must not be read as end-to-end latency.</li>
+<li><strong>No recorded live <code>STOLEN</code> alert.</strong> The recorded live run of the camera node (eight readings) returned <code>CLEAR</code> every time, so a real detection travelling all the way to a real dashboard has not been captured.</li>
+<li><strong>Front-end behaviour is from code reading.</strong> The browser code (reconnection, timers, rendered text) was read, not run in a browser for this report.</li>
+<li><strong>One camera, one server process.</strong> Nothing was tested with several cameras, several officers at scale, or several server workers.</li>
+<li><strong>Tests run on SQLite.</strong> As in the backend report.</li>
+</ul>
+<h2>1.9 Organisation of the Report</h2>
+<p>Chapter 2 reviews WebSockets, streaming and monitoring concepts. Chapter 3 describes the method, tools and ethics. Chapter 4 gives the analysis and design. Chapter 5 describes the implementation and the student's contribution. Chapter 6 presents the tests, probes and objective-by-objective evaluation. Chapter 7 discusses the findings. Chapter 8 concludes. The appendices hold the contribution statement, installation guide, extra diagrams, test output and code.</p><h1>Chapter 2: Literature Review</h1>
+<h2>2.1 Introduction</h2>
+<p>This chapter reviews the concepts behind the real-time and integration component: how servers push data to browsers, how video is streamed to a web page, how services are monitored, and how separate programs are integrated. It then reviews existing approaches and identifies the gap.</p>
+<h2>2.2 Key Concepts and Theories</h2>
+<h3>2.2.1 Getting data from server to browser</h3>
+<p>HTTP is request and response: the server can only answer when the browser asks. Three techniques let a server tell a browser about something new:</p>
+<ul>
+<li><strong>Polling:</strong> the browser asks repeatedly ("anything new?"). Simple, but wasteful and always late by up to one polling interval.</li>
+<li><strong>Server-Sent Events:</strong> a one-way stream from server to browser over HTTP.</li>
+<li><strong>WebSocket (RFC 6455):</strong> a single long-lived, two-way connection, started with an HTTP request that is "upgraded". Messages flow either way with little overhead, which suits pushing an alert the instant it exists.</li>
+</ul>
+<h3>2.2.2 WebSocket authentication</h3>
+<p>A browser's <code>WebSocket</code> object cannot set an <code>Authorization</code> header. Common workarounds are to put a token in the URL query string, to send it as the first message, or to use a cookie. A token in a URL is easy to implement but is likely to be written to server logs and history, and it is only checked once, when the connection is opened.</p>
+<h3>2.2.3 The publish-to-connected-clients pattern</h3>
+<p>A server keeps a list of open connections and, when an event occurs, writes the message to each. This is simple and needs no message broker, but the list lives in one process's memory. If the server runs as several processes, each has its own list, so an event handled by one process reaches only its own clients. A shared broker (for example Redis publish/subscribe) removes that limit.</p>
+<h3>2.2.4 Streaming video to a browser: MJPEG</h3>
+<p><strong>Motion JPEG (MJPEG)</strong> sends a video as a continuous series of JPEG images in one HTTP response with the content type <code>multipart/x-mixed-replace</code>. Browsers can show it in an ordinary <code>&lt;img&gt;</code> tag, which is why phone "IP camera" apps use it. It is easy but uses more bandwidth than modern codecs. Because an <code>&lt;img&gt;</code> tag cannot send custom headers, protecting such a stream also needs a query-string token or a cookie.</p>
+<h3>2.2.5 A proxy in front of a device</h3>
+<p>A reverse proxy relays a request to another server and returns its answer. Putting the server in front of the camera means the browser never learns the camera's address, and the server can check who is asking before relaying. The costs are extra load on the server and the need to close the upstream connection when the viewer leaves.</p>
+<h3>2.2.6 Health monitoring</h3>
+<p>A health endpoint reports whether a service and its dependencies are working. Good practice is that each reported value is <em>measured</em>, not asserted, and that the endpoint is not open to the public, because it reveals internal details. Distinguishing "liveness" (the process is up) from "readiness" (its dependencies work) is common practice in operations.</p>
+<h3>2.2.7 Integration by contract</h3>
+<p>Separately deployed programs integrate by agreeing on interfaces: URLs, message shapes, ports and configuration keys. Documenting the contract, and keeping configuration in one place, reduces the chance that a change in one program silently breaks another.</p>
+<h2>2.3 Existing Systems / Related Work</h2>
+<ul>
+<li><strong>Polling dashboards</strong> are the simplest approach and remain common in small systems; they trade latency for simplicity.</li>
+<li><strong>Socket.IO and similar libraries</strong> add automatic reconnection, heartbeats and fall-backs on top of WebSockets. This project uses the browser's raw WebSocket and Starlette's WebSocket support, so it has to supply these itself.</li>
+<li><strong>Message brokers (Redis, RabbitMQ, Kafka)</strong> are the standard answer to multi-process fan-out; not used here.</li>
+<li><strong>Video platforms and surveillance systems</strong> use RTSP, WebRTC or HLS instead of MJPEG for efficiency; MJPEG was chosen because the phone app provides it directly.</li>
+<li><strong>Monitoring tools (Prometheus, Grafana, health-check libraries)</strong> measure service state properly; this project has a small hand-written health endpoint instead.</li>
+</ul>
+<p><em>Note on sources.</em> This chapter relies on standards and public documentation listed in the References. No performance figures from other systems are quoted.</p>
+<h2>2.4 Comparative Analysis</h2>
+<table>
+<thead>
+<tr>
+<th>Criterion</th>
+<th>This project</th>
+<th>Polling</th>
+<th>Socket.IO + broker</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Delivery model</td>
+<td>Push over WebSocket</td>
+<td>Pull</td>
+<td>Push</td>
+</tr>
+<tr>
+<td>Automatic reconnection</td>
+<td>Not implemented</td>
+<td>Not needed</td>
+<td>Built in</td>
+</tr>
+<tr>
+<td>Works across several server processes</td>
+<td>No</td>
+<td>Yes</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Setup effort</td>
+<td>Low</td>
+<td>Lowest</td>
+<td>Higher</td>
+</tr>
+<tr>
+<td>Delay to the officer</td>
+<td>Depends on delivery only</td>
+<td>Up to one polling interval</td>
+<td>Depends on delivery only</td>
+</tr>
+</tbody>
+</table>
+<p>The table compares design properties, not measured performance.</p>
+<h2>2.5 Research / Knowledge Gap</h2>
+<p>Tutorials show how to broadcast to WebSocket clients but seldom show what happens when a client is deactivated, a connection drops, or a slow client is present. The gap this report addresses is a working alert channel for a police setting together with a <strong>tested account of its failure modes</strong>.</p>
+<h2>2.6 Conceptual Framework</h2>
+<pre><code>camera node --HTTP--&gt; backend --match--&gt; ConnectionManager --WebSocket--&gt; browsers (police, admin)
+                          |                                                    ^
+                          +------------ authenticated MJPEG proxy -------------+ (camera feed)
+                          +------------ /system/health, /system/camera-nodes ---+ (status)
+</code></pre>
+<p>Detection is pushed; status is pulled; the camera feed is relayed. Each channel is authenticated with the same token as the rest of the API, except where noted in Chapter 6.</p>
+<h2>2.7 Chapter Summary</h2>
+<p>WebSockets are the right tool for pushing alerts. The simple in-memory design used here is adequate for one server process and leaves reconnection, multi-process delivery and continuous token checks to be added. MJPEG proxying and a hand-written health endpoint are workable for a prototype but need care.</p><h1>Chapter 3: Methodology</h1>
+<h2>3.1 Introduction</h2>
+<p>This chapter explains how the real-time and integration component was developed and evaluated: the approach, how requirements were obtained, the architecture, tools, ethical considerations and the evaluation method.</p>
+<h2>3.2 Research / Development Approach</h2>
+<p>The project was built <strong>iteratively</strong>. The web application and the camera-node pipeline were two work-streams that met at <code>POST /alerts/check-plate</code>. For this component the work proceeded from the seam outward: first agree what the camera sends and what the backend answers, then add the broadcast on a match, then the browser's connection and the toast, then camera status, the feed proxy and the health endpoint, and finally the start-up script.</p>
+<p>Verification followed a <strong>probe-and-record</strong> approach, as in the backend report: after the features worked, the code was read for failure modes, each suspected failure was turned into a short temporary test, and only behaviour actually observed was recorded (§6.4).</p>
+<pre><code>Requirements → Design → Implementation → Integration → Testing / Failure-mode review → (issues found? back)
+</code></pre>
+<h2>3.3 Requirements / Data Collection</h2>
+<p>Requirements came from (a) the gap in Chapter 1, (b) what officers need to see (an alert wherever they are, the camera, whether the system is up), and (c) what the other members' components needed: the camera node needs a stable endpoint, and the front end needs a message shape to render. No stakeholder interviews or user studies are recorded, so the requirements are the group's own analysis.</p>
+<p>The data flowing through this component is operational: plate strings, camera identifiers, confidence values, locations and vehicle make, model and colour from the matched report. Test data is synthetic (for example plate <code>RT12345</code>).</p>
+<h2>3.4 System Architecture / Research Workflow</h2>
+<p><img alt="Figure 3.1: SVDS system architecture" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/04-system-design-1.png" /></p>
+<p>Three independently run processes communicate only over the network. This component owns the arrows between them: the camera node to backend call, the backend to browser WebSocket, and the proxied camera feed.</p>
+<h2>3.5 Tools and Technologies</h2>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Technology</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Server-side WebSocket</td>
+<td>FastAPI 0.111.0 / Starlette WebSocket support, served by Uvicorn 0.29.0 (<code>uvicorn[standard]</code>)</td>
+</tr>
+<tr>
+<td>HTTP client for camera checks and proxy</td>
+<td><code>requests</code></td>
+</tr>
+<tr>
+<td>Streaming</td>
+<td><code>StreamingResponse</code> relaying an MJPEG stream (<code>multipart/x-mixed-replace</code>)</td>
+</tr>
+<tr>
+<td>Browser side</td>
+<td>Native <code>WebSocket</code> API; React context (<code>AlertsContext</code>)</td>
+</tr>
+<tr>
+<td>Camera source</td>
+<td>Android phone running an IP Webcam app (MJPEG over Wi-Fi/hotspot)</td>
+</tr>
+<tr>
+<td>Start-up</td>
+<td>PowerShell script <code>run-all.ps1</code></td>
+</tr>
+<tr>
+<td>Testing</td>
+<td>pytest, Starlette <code>TestClient</code> (including <code>websocket_connect</code>), a small local HTTP server standing in for the camera</td>
+</tr>
+<tr>
+<td>OS</td>
+<td>Windows 11</td>
+</tr>
+</tbody>
+</table>
+<h2>3.6 Ethical and Legal Considerations</h2>
+<ul>
+<li><strong>Who receives alerts.</strong> Alerts contain a plate, a location and the vehicle's make, model and colour. They go only to police and admin connections; reportee, missing and invalid tokens are refused (tested).</li>
+<li><strong>The camera feed.</strong> A live feed can capture people as well as vehicles. It is limited to police and admin tokens. A real deployment would need a lawful basis, signage and a retention policy; none of these is provided by the code, and the feed is not recorded by the system.</li>
+<li><strong>Token in the URL.</strong> Both the WebSocket and the feed take the token as a query parameter because the browser cannot send a header. Such URLs can appear in logs, so tokens can leak into log files (§6.4).</li>
+<li><strong>False alerts.</strong> A wrong alert could send officers to an innocent driver. The alert is a lead for a human, and officers can flag false positives.</li>
+<li><strong>Health endpoint disclosure.</strong> The health endpoint reveals disk space, database pool use, user and report counts and camera state. It is currently unauthenticated (§6.4).</li>
+<li><strong>Responsible testing.</strong> Probes ran only against the project's own code in a test process; the local stand-in camera served only synthetic bytes. No live deployment or real camera was attacked or interfered with.</li>
+</ul>
+<h2>3.7 Evaluation Method</h2>
+<ol>
+<li><strong>Functional tests through the real WebSocket route</strong> using the framework's test client: connect as police, cause a match, receive the message.</li>
+<li><strong>Failure-mode probes</strong> for authentication, disconnection handling and the health and status endpoints.</li>
+<li><strong>A stand-in camera:</strong> a local HTTP server that serves a short MJPEG-style stream, used to test the proxy and the online/offline logic without the real phone.</li>
+<li><strong>Code review</strong> of the browser code for reconnection and timers (read, not run).</li>
+<li><strong>Objective-by-objective review</strong> against R1 to R7 in §1.4.</li>
+</ol>
+<p>Not done: measurements over a real network or with a real browser, load tests, tests with several server processes, or user evaluation.</p>
+<h2>3.8 Chapter Summary</h2>
+<p>The component was built seam-first and verified with in-process WebSocket tests, a stand-in camera and failure-mode probes. Results are about behaviour, not real-network timing.</p><h1>Chapter 4: System Analysis and Design</h1>
+<h2>4.1 Introduction</h2>
+<p>The system-level material (stakeholders, overall architecture) is shared by the group. The requirements, use cases, message design and monitoring design below are those of the <strong>real-time and integration</strong> component.</p>
+<h2>4.2 Stakeholder and User Analysis</h2>
+<table>
+<thead>
+<tr>
+<th>Stakeholder</th>
+<th>Interest</th>
+<th>Needs from this component</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Police officer</td>
+<td>Act quickly on a sighting</td>
+<td>An alert on any page, without refreshing; the camera view; whether the camera is up</td>
+</tr>
+<tr>
+<td>Administrator</td>
+<td>Keep the system running</td>
+<td>System health; camera status</td>
+</tr>
+<tr>
+<td>Camera operator</td>
+<td>Keep the phone streaming</td>
+<td>To know if the feed is reaching the server</td>
+</tr>
+<tr>
+<td>Backend, AI/vision and frontend members</td>
+<td>Build their parts independently</td>
+<td>Written contracts and a single start-up command</td>
+</tr>
+<tr>
+<td>Reportee</td>
+<td>Nothing directly</td>
+<td>Must <strong>not</strong> receive alerts</td>
+</tr>
+</tbody>
+</table>
+<h2>4.3 Functional Requirements</h2>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Requirement</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>FR-R1</td>
+<td>The backend keeps the set of open alert connections and, when <code>check-plate</code> matches, sends every connection a <code>STOLEN_DETECTED</code> message.</td>
+</tr>
+<tr>
+<td>FR-R2</td>
+<td>A connection is accepted only if it presents a valid token whose role is police or admin; otherwise it is closed with code 1008 (policy violation).</td>
+</tr>
+<tr>
+<td>FR-R3</td>
+<td>A client can send <code>ping</code> and receive <code>pong</code>. A connection that fails during a broadcast is dropped without affecting the others.</td>
+</tr>
+<tr>
+<td>FR-R4</td>
+<td>The browser opens one connection per tab after a police or admin login, keeps it across page changes, and shows a notification and an unread count when a message arrives.</td>
+</tr>
+<tr>
+<td>FR-R5</td>
+<td><code>GET /system/camera-nodes</code> (police and admin) returns the node's id, location, online or offline status, detection count, average confidence and last-seen time.</td>
+</tr>
+<tr>
+<td>FR-R6</td>
+<td><code>GET /system/live-feed?token=...</code> relays the camera's MJPEG stream to police and admin tokens only, returning 503 if the camera is not configured or is unreachable.</td>
+</tr>
+<tr>
+<td>FR-R7</td>
+<td><code>GET /system/health</code> returns database, disk, camera, user and report metrics and a service list.</td>
+</tr>
+<tr>
+<td>FR-R8</td>
+<td>The Cameras page shows the feed and node list; the System Health page shows the health metrics.</td>
+</tr>
+<tr>
+<td>FR-R9</td>
+<td>A single script starts backend, front end and camera node.</td>
+</tr>
+</tbody>
+</table>
+<h2>4.4 Non-Functional Requirements</h2>
+<ul>
+<li><strong>Timeliness:</strong> an alert is sent as part of handling the matching request, with no polling delay.</li>
+<li><strong>Isolation of failure:</strong> one dead connection must not stop delivery to others; a backend outage must not crash the camera node (the node's side).</li>
+<li><strong>Security:</strong> only police and admin receive alerts and the feed; the camera's address is never sent to the browser.</li>
+<li><strong>Loose coupling:</strong> the three programs share only URLs, message shapes and configuration keys.</li>
+<li><strong>Operability:</strong> a person can tell from the interface whether the camera is reachable.</li>
+</ul>
+<h2>4.5 Use Cases / User Stories</h2>
+<p><strong>UC-R1: Officer is alerted.</strong> <em>Precondition:</em> the officer is logged in on any page. The camera node reports a plate that matches an active report. The backend saves an alert and broadcasts. The officer's browser shows a "Vehicle detected" toast with the plate, location, camera and confidence, and the unread badge increases.
+<em>Alternate flows:</em> the officer's connection has dropped (no alert is shown; see §6.4); the officer is a reportee (no connection exists).</p>
+<p><strong>UC-R2: Officer watches the camera.</strong> On the Cameras page the browser loads the proxied feed in an image tag. If the camera is unreachable the page shows "Camera feed unavailable".</p>
+<p><strong>UC-R3: Administrator checks system health.</strong> The System Health page shows response time, database connections, disk, active users and camera nodes.</p>
+<p><strong>UC-R4: Operator starts the system.</strong> <code>run-all.ps1</code> opens the backend, front end and camera node windows.</p>
+<p><strong>User story.</strong> <em>As an officer working on the analytics page, I want a stolen-vehicle sighting to appear immediately without my having to check the alerts page.</em></p>
+<h2>4.6 System / Solution Architecture</h2>
+<p><img alt="Figure 4.1: detection-to-alert sequence" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/04-system-design-4.png" /></p>
+<p>Components owned here:</p>
+<ul>
+<li><strong><code>ConnectionManager</code></strong> in <code>routers/alerts.py</code>: a list of open WebSockets with <code>connect</code>, <code>disconnect</code> and <code>broadcast</code>.</li>
+<li><strong><code>/alerts/ws</code>:</strong> the WebSocket route.</li>
+<li><strong><code>routers/system.py</code>:</strong> <code>camera-nodes</code>, <code>live-feed</code>, <code>health</code>, <code>is_camera_online()</code>.</li>
+<li><strong><code>AlertsContext</code> and <code>NotificationToast</code></strong> in the front end.</li>
+<li><strong><code>run-all.ps1</code></strong> and the two <code>.env</code> files that must agree on the camera address.</li>
+</ul>
+<h2>4.7 Database / Data Design</h2>
+<p>This component has no tables of its own. It <strong>reads</strong> the <code>alerts</code> table (count, average confidence and latest time for the configured camera) and the <code>users</code>, <code>reports</code> and <code>audit_log</code> tables (counts for the health page). The schema belongs to the backend member (Appendix C).</p>
+<p><strong>The alert message</strong> sent over the WebSocket is JSON:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>type</code></td>
+<td>Always <code>STOLEN_DETECTED</code></td>
+</tr>
+<tr>
+<td><code>alert_id</code></td>
+<td>Id of the stored alert</td>
+</tr>
+<tr>
+<td><code>plate</code></td>
+<td>The plate as received, upper-cased</td>
+</tr>
+<tr>
+<td><code>location</code>, <code>camera_id</code>, <code>confidence</code></td>
+<td>As reported by the camera node</td>
+</tr>
+<tr>
+<td><code>vehicle_make</code>, <code>vehicle_model</code>, <code>vehicle_color</code></td>
+<td>From the matched report</td>
+</tr>
+<tr>
+<td><code>detected_at</code></td>
+<td>Server timestamp of the alert</td>
+</tr>
+</tbody>
+</table>
+<h2>4.8 Interface / Interaction Design</h2>
+<p><strong>Endpoints and channels:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Interface</th>
+<th>Direction</th>
+<th>Authentication</th>
+<th>Who</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>POST /alerts/check-plate</code></td>
+<td>camera node → backend</td>
+<td>none</td>
+<td>public</td>
+</tr>
+<tr>
+<td><code>WS /alerts/ws?token=</code></td>
+<td>backend → browser</td>
+<td>token in query string; police or admin</td>
+<td>police, admin</td>
+</tr>
+<tr>
+<td><code>GET /system/camera-nodes</code></td>
+<td>browser → backend</td>
+<td>Bearer header; police or admin</td>
+<td>police, admin</td>
+</tr>
+<tr>
+<td><code>GET /system/live-feed?token=</code></td>
+<td>browser → backend → camera</td>
+<td>token in query string; police or admin</td>
+<td>police, admin</td>
+</tr>
+<tr>
+<td><code>GET /system/health</code></td>
+<td>browser → backend</td>
+<td><strong>none</strong></td>
+<td>public (see §6.4)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Interface elements (designed with the frontend member):</strong> a toast at the top of every page, an unread badge in the police navigation, the Cameras page (feed and node table) and the System Health page (four metric cards, core services, camera nodes).</p>
+<p><strong>Configuration contract:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Where</th>
+<th>Must match</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Phone stream address</td>
+<td><code>vrrs-node/.env</code> <code>PHONE_STREAM_URL</code></td>
+<td>Backend <code>.env</code> <code>CAMERA_STREAM_URL</code></td>
+</tr>
+<tr>
+<td>Camera id</td>
+<td><code>vrrs-node/.env</code> <code>CAMERA_ID</code></td>
+<td>Backend <code>.env</code> <code>CAMERA_NODE_ID</code></td>
+</tr>
+<tr>
+<td>Backend address</td>
+<td><code>vrrs-node/.env</code> <code>BACKEND_URL</code></td>
+<td>The port the backend runs on</td>
+</tr>
+<tr>
+<td>API and WebSocket addresses</td>
+<td><code>vrrs-frontend/.env</code> <code>VITE_API_BASE_URL</code>, <code>VITE_WS_URL</code></td>
+<td>The backend</td>
+</tr>
+</tbody>
+</table>
+<h2>4.9 Algorithms / Models / Technical Design</h2>
+<h3>4.9.1 Broadcast</h3>
+<pre><code>on match:  save alert -&gt; for each connection: try send(json) ; collect failures -&gt; remove failed
+</code></pre>
+<p>Sending is sequential: one slow client delays the ones after it. Failed connections are removed after the loop.</p>
+<h3>4.9.2 Handshake authentication</h3>
+<pre><code>connect(token) -&gt; decode_token(token) -&gt; role in {police, admin}? -&gt; accept : close(1008)
+</code></pre>
+<p>The token is checked once. After acceptance the connection is trusted until it closes.</p>
+<h3>4.9.3 Camera online check</h3>
+<p><code>is_camera_online()</code> performs an HTTP GET on the stream address with a 3-second timeout and returns true if the connection opens. It is called whenever camera status or health is requested.</p>
+<h3>4.9.4 Feed proxy</h3>
+<pre><code>check token role -&gt; open upstream GET (stream, 10 s connect timeout) -&gt; stream 4 KB chunks to the browser
+</code></pre>
+<h3>4.9.5 Health metrics</h3>
+<p>Values are computed at request time: database round trip (<code>SELECT 1</code>), disk usage of the drive, connection-pool counts, counts from tables. Some fields are fixed values, discussed in §6.4.</p>
+<h2>4.10 Chapter Summary</h2>
+<p>The design uses a simple in-memory connection list, a one-time token check at connect, a relayed MJPEG feed and a hand-written health endpoint. Contracts and configuration keys are written down so the three programs integrate without sharing code.</p><h1>Chapter 5: Implementation / Development</h1>
+<h2>5.1 Introduction</h2>
+<p>This chapter describes how the real-time and integration component was built, how it connects to the other members' work, the problems met, and the student's contribution.</p>
+<h2>5.2 Development Environment</h2>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Machine</td>
+<td>Windows 11 PC</td>
+</tr>
+<tr>
+<td>Backend runtime</td>
+<td>Python with FastAPI 0.111.0, Uvicorn 0.29.0 (<code>uvicorn[standard]</code> provides WebSocket support), <code>requests</code></td>
+</tr>
+<tr>
+<td>Front end</td>
+<td>React with Vite (dev server on port 5173)</td>
+</tr>
+<tr>
+<td>Camera</td>
+<td>Android phone with an IP Webcam app, streaming at <code>http://&lt;phone-ip&gt;:8080/video</code></td>
+</tr>
+<tr>
+<td>Tools</td>
+<td>Swagger UI for HTTP routes, pytest for tests, PowerShell for start-up</td>
+</tr>
+</tbody>
+</table>
+<h2>5.3 System Components / Modules</h2>
+<table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Purpose</th>
+<th>Built by</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ConnectionManager</code> and <code>/alerts/ws</code> in <code>app/routers/alerts.py</code></td>
+<td>Track connections, authenticate the handshake, broadcast</td>
+<td>Real-time (this report)</td>
+</tr>
+<tr>
+<td>The <code>manager.broadcast(...)</code> call inside <code>check-plate</code></td>
+<td>Trigger the broadcast after a match</td>
+<td>Shared: the endpoint is the backend member's, the call is agreed with this member</td>
+</tr>
+<tr>
+<td><code>app/routers/system.py</code>: <code>camera-nodes</code>, <code>live-feed</code>, <code>health</code>, <code>is_camera_online</code></td>
+<td>Camera status, feed proxy, health</td>
+<td>Real-time (this report)</td>
+</tr>
+<tr>
+<td><code>/system/audit</code> in the same file</td>
+<td>Audit-log listing</td>
+<td>Backend/security member's records; listing route shared</td>
+</tr>
+<tr>
+<td><code>src/context/AlertsContext.jsx</code>, <code>components/NotificationToast.jsx</code>, <code>createAlertSocket</code> in <code>services/api.js</code></td>
+<td>Browser connection, unread count, toast</td>
+<td>Real-time (this report)</td>
+</tr>
+<tr>
+<td><code>pages/police/Cameras.jsx</code>, <code>pages/admin/SystemHealth.jsx</code></td>
+<td>Consume status, feed and health</td>
+<td>Layout by frontend member; data wiring here</td>
+</tr>
+<tr>
+<td><code>run-all.ps1</code> and <code>.env</code> keys</td>
+<td>Start-up and configuration</td>
+<td>Real-time (this report)</td>
+</tr>
+</tbody>
+</table>
+<h2>5.4 Key Implementation Details</h2>
+<h3>5.4.1 Connection manager and WebSocket route</h3>
+<pre><code class="language-python">class ConnectionManager:
+    def __init__(self): self.active_connections = []
+    async def connect(self, ws): await ws.accept(); self.active_connections.append(ws)
+    def disconnect(self, ws): self.active_connections.remove(ws)
+    async def broadcast(self, data):
+        message = json.dumps(data); disconnected = []
+        for c in self.active_connections:
+            try: await c.send_text(message)
+            except Exception: disconnected.append(c)
+        for c in disconnected: self.active_connections.remove(c)
+
+@router.websocket(&quot;/ws&quot;)
+async def websocket_endpoint(websocket):
+    token = websocket.query_params.get(&quot;token&quot;)
+    payload = decode_token(token) if token else None
+    if not payload or payload.get(&quot;role&quot;) not in (&quot;police&quot;, &quot;admin&quot;):
+        await websocket.close(code=1008); return
+    await manager.connect(websocket)
+    try:
+        while True:
+            if await websocket.receive_text() == &quot;ping&quot;: await websocket.send_text(&quot;pong&quot;)
+    except WebSocketDisconnect: manager.disconnect(websocket)
+</code></pre>
+<p>(Shown in condensed form.) The route reuses <code>decode_token</code> from the backend member's <code>auth.py</code>, so the same tokens work for REST and WebSocket.</p>
+<h3>5.4.2 Browser side</h3>
+<p><code>AlertsProvider</code> opens the socket once when the user's role is police or admin, and closes it when the provider unmounts:</p>
+<pre><code class="language-js">const ws = createAlertSocket((data) =&gt; {
+    if (data.type === &quot;STOLEN_DETECTED&quot;) {
+        setUnread(prev =&gt; prev + 1); setNotification(data); setLastEvent(data);
+    }
+});
+</code></pre>
+<p><code>NotificationToast</code> is mounted once at the top of <code>App</code>, so it shows on every page. <code>Alerts.jsx</code> prepends <code>lastEvent</code> to its list when the "unread" view is open, so the new alert appears without a refresh. <code>createAlertSocket</code> builds the URL <code>ws://&lt;host&gt;/alerts/ws?token=&lt;jwt&gt;</code> from <code>VITE_WS_URL</code>, sends <code>ping</code> every 30 seconds, and logs close and error events to the console.</p>
+<h3>5.4.3 Camera status and health</h3>
+<p><code>camera-nodes</code> combines <code>is_camera_online()</code> with a database query for the configured camera's detection count, average confidence and latest detection time. Old readings stored as fractions (0 to 1) are scaled to percentages with the same expression used in the analytics code. <code>health</code> returns metrics and a fixed list of four services. Its database timing is a <code>SELECT 1</code> round trip, its disk figures come from <code>shutil.disk_usage</code>, and its pool figures from the SQLAlchemy engine pool.</p>
+<h3>5.4.4 The feed proxy</h3>
+<pre><code class="language-python">payload = decode_token(token)
+if not payload or payload.get(&quot;role&quot;) not in (&quot;police&quot;, &quot;admin&quot;): raise HTTPException(401)
+upstream = requests.get(CAMERA_STREAM_URL, stream=True, timeout=10)
+return StreamingResponse(upstream.iter_content(chunk_size=4096), media_type=content_type)
+</code></pre>
+<p>On the front end the Cameras page sets an image tag's <code>src</code> to <code>/system/live-feed?token=...</code>, and shows a message if the image fails to load.</p>
+<h3>5.4.5 Start-up script</h3>
+<p><code>run-all.ps1</code> opens three PowerShell windows: the backend (<code>uvicorn</code> on port 8000, using the project's virtual environment), the front end (<code>npm run dev</code>), and the camera node (the GPU Python environment running <code>plate_node.py</code>). It prints a reminder to update the phone's address first.</p>
+<h2>5.5 Integration</h2>
+<ul>
+<li><strong>With the camera node (AI/vision member):</strong> the node calls <code>check-plate</code>; it needs no knowledge of WebSockets. The camera id it sends must equal the backend's <code>CAMERA_NODE_ID</code> for the Cameras page statistics to count its detections.</li>
+<li><strong>With the backend (backend member):</strong> reuses the token functions and the database session; adds routes under <code>/alerts</code> and <code>/system</code>.</li>
+<li><strong>With the front end (frontend member):</strong> the message shape of §4.7 is the contract; the toast and the alerts list read <code>plate</code>, <code>location</code>, <code>camera_id</code>, <code>confidence</code>. The live message has no <code>is_read</code> field and calls its identifier <code>alert_id</code>, while stored alerts use <code>id</code>; the Alerts page handles both spellings.</li>
+<li><strong>Configuration:</strong> the phone's address must be entered twice, once in each of two <code>.env</code> files. On the development machine both currently hold the same address (checked).</li>
+</ul>
+<h2>5.6 Challenges and Solutions</h2>
+<table>
+<thead>
+<tr>
+<th>Challenge</th>
+<th>Cause</th>
+<th>Solution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Browser cannot send an <code>Authorization</code> header on a WebSocket or an <code>&lt;img&gt;</code> request</td>
+<td>Browser API limits</td>
+<td>Token passed as a query parameter and checked in the handler (a known trade-off, §6.4)</td>
+</tr>
+<tr>
+<td>Exposing the camera's raw address to browsers</td>
+<td>The phone app has no authentication of its own</td>
+<td>Relay through an authenticated proxy so only the server knows the address</td>
+</tr>
+<tr>
+<td>Officer on a non-alert page would miss a detection</td>
+<td>Per-page connections would only exist on the alerts page</td>
+<td>One connection in a top-level context plus a top-level toast</td>
+</tr>
+<tr>
+<td>A dead connection should not stop delivery</td>
+<td>Sending to a closed socket raises an error</td>
+<td>Broadcast catches per-connection errors and removes failed connections afterwards</td>
+</tr>
+<tr>
+<td>Three programs to start in the right way</td>
+<td>Separate runtimes and environments</td>
+<td><code>run-all.ps1</code></td>
+</tr>
+<tr>
+<td>Phone address changes on reconnect</td>
+<td>DHCP on the phone's hotspot</td>
+<td>Documented manual edit of two <code>.env</code> files; automatic discovery is future work</td>
+</tr>
+<tr>
+<td>Camera unreachable during health checks</td>
+<td>Blocking network call</td>
+<td>3-second timeout; measured at about 2 s to report offline (§6.4)</td>
+</tr>
+</tbody>
+</table>
+<h2>5.7 Individual Contribution (group project)</h2>
+<p>The student was responsible for <strong>work area 5</strong> of the group's seven (real-time alerts and monitoring), together with the <strong>integration</strong> of the phone, camera node, backend and front end (Appendix A). This covers:</p>
+<ul>
+<li>the WebSocket connection manager, route and handshake check;</li>
+<li>the broadcast message design and the call from <code>check-plate</code>;</li>
+<li>camera status, the authenticated live-feed proxy and the health endpoint;</li>
+<li>the browser's alert connection, unread count and toast;</li>
+<li>the configuration contract and <code>run-all.ps1</code>;</li>
+<li>the failure-mode review and the tests and probes in Chapter 6.</li>
+</ul>
+<p>Work by others that this component uses, <strong>not claimed here</strong>: the token, roles and <code>check-plate</code> matching (backend member); the detection model and camera node (AI/vision member); the page layouts, styling and analytics (frontend member). The backend tests in <code>vrrs-backend/tests/</code> include some for alerts; who wrote them should be confirmed by the student.</p>
+<h2>5.8 Chapter Summary</h2>
+<p>The component is a small in-memory WebSocket broadcaster, a relayed MJPEG feed, a status and health service, and the browser code and scripts that connect them. Its main design decisions are one shared connection per tab, per-connection error isolation, and tokens in the query string.</p><h1>Chapter 6: Testing, Results and Evaluation</h1>
+<h2>6.1 Introduction</h2>
+<p>This chapter evaluates the real-time and integration component. Results come from temporary test files that were written for this report, run in the project's test environment, and then <strong>deleted</strong>, so the shipped test suite is unchanged (31 tests, still passing). Their printed output is reproduced in Appendix D.</p>
+<h3>6.1.1 Version of the code evaluated</h3>
+<p><strong>Note on the version of the code evaluated.</strong> All findings, test counts, coverage figures and line counts in this report were obtained against the code as committed (commit <code>a349fc6</code>). After that evaluation, uncommitted changes appeared in the working tree (<code>middleware.py</code>, <code>alerts.py</code>, <code>system.py</code>, <code>main.py</code>, <code>api.js</code>, <code>SystemHealth.jsx</code>, <code>conftest.py</code>, a new <code>tests/test_regressions.py</code> and a new front-end test). With those changes the backend suite has <strong>38 tests, all passing</strong>, and the front end has <strong>one</strong> test (<code>npm test</code>), which also passes. The changes appear to address the items listed below; this was established by reading the changes and running the tests, and the original probes were <strong>not</strong> re-run against the changed code. Where this report says a finding was "not fixed", it refers to the evaluated commit.</p>
+<p><em>Appear addressed in the working tree:</em> <strong>R-2</strong> (the WebSocket re-checks the account on connect and on every message, including the heartbeat, and the feed proxy checks the account; the feed now answers a wrong role with 403 instead of 401, so TC-R9 would now expect 403), <strong>R-9</strong> (the ping timer is cleared on close), and the health page's database-connection card, which now shows "N/A" when the pool cannot report counts (not one of the listed findings). The changes also make the browser ignore the server's <code>pong</code> reply; before this, the original client would have failed to parse it as JSON, a defect this report did not identify. <em>Still open as far as the changes show:</em> R-1 (health endpoint still needs no login), R-3, R-5 to R-8, R-10 to R-13 (including the browser never reconnecting).</p>
+<h2>6.2 Testing Strategy</h2>
+<table>
+<thead>
+<tr>
+<th>Level</th>
+<th>Technique</th>
+<th>Target</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Functional (in process)</td>
+<td>Starlette <code>TestClient.websocket_connect</code> against the real route</td>
+<td>Handshake, broadcast, ping, rejection</td>
+</tr>
+<tr>
+<td>Failure-mode probes</td>
+<td>Direct calls to the manager; token states</td>
+<td>Disconnect handling, dead connections, deactivated users</td>
+</tr>
+<tr>
+<td>Service tests with a stand-in camera</td>
+<td>A local HTTP server serving a short MJPEG-style stream</td>
+<td>Feed proxy, online/offline status, 503 behaviour</td>
+</tr>
+<tr>
+<td>Endpoint inspection</td>
+<td>Calls without and with tokens</td>
+<td>Health and status endpoints</td>
+</tr>
+<tr>
+<td>Code review</td>
+<td>Reading the browser code</td>
+<td>Reconnection, timers, rendered fields</td>
+</tr>
+<tr>
+<td>Acceptance / user testing</td>
+<td>None</td>
+<td>See §6.5</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Limits of the environment.</strong> The server and the client run in one process, on an in-memory SQLite database. The stand-in camera is a local server, not the phone. Nothing here involves a real network, a real browser, video decoding or the detector. Front-end results in §6.4.3 come from reading code, not running it.</p>
+<h2>6.3 Test Cases and Results</h2>
+<p><strong>Table 6.1: Test cases</strong></p>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Test case</th>
+<th>Expected result</th>
+<th>Observed</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TC-R1</td>
+<td>Police client connected; <code>check-plate</code> matches an active report</td>
+<td>Client receives <code>STOLEN_DETECTED</code> with plate and vehicle make</td>
+<td>Received <code>STOLEN_DETECTED</code>, plate <code>RT12345</code>, make <code>Toyota</code>; HTTP answer <code>STOLEN</code></td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-R2</td>
+<td>Client sends <code>ping</code></td>
+<td><code>pong</code></td>
+<td><code>pong</code></td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-R3</td>
+<td>One police and one admin client connected; one match</td>
+<td>Both receive it</td>
+<td>Both received</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-R4</td>
+<td>Connect with a reportee token</td>
+<td>Refused</td>
+<td>Closed with code 1008</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-R5</td>
+<td>Connect with no token</td>
+<td>Refused</td>
+<td>Closed with code 1008</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-R6</td>
+<td>Connect with an invalid token</td>
+<td>Refused</td>
+<td>Closed with code 1008</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-R7</td>
+<td>Broadcast when one connection is dead</td>
+<td>Dead one dropped; live one still receives</td>
+<td>One connection remained; live one received the message</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-R8</td>
+<td>Live-feed proxy with a reachable stand-in camera and a police token</td>
+<td>200 and the stream's frames</td>
+<td>200, <code>multipart/x-mixed-replace</code>, 132 bytes including the frame data</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-R9</td>
+<td>Live feed with a reportee token</td>
+<td>Refused</td>
+<td>401</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-R10</td>
+<td>Live feed with no token</td>
+<td>Refused</td>
+<td>422 (missing required parameter)</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-R11</td>
+<td>Camera status with the stand-in camera reachable</td>
+<td><code>online</code></td>
+<td><code>online</code>; health reported one node online</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-R12</td>
+<td>Camera unreachable</td>
+<td>Feed 503; status <code>offline</code></td>
+<td>503 after about 2.0 s; <code>offline</code> after about 2.1 s</td>
+<td>Pass</td>
+</tr>
+<tr>
+<td>TC-R13</td>
+<td>Camera status with no stream configured or reachable</td>
+<td><code>offline</code></td>
+<td><code>offline</code>; the node list has the fields id, location, status, detections, average confidence, last seen</td>
+<td>Pass</td>
+</tr>
+</tbody>
+</table>
+<h2>6.4 Results and Findings</h2>
+<h3>6.4.1 Delivery</h3>
+<p>In the in-process test, the time from calling <code>check-plate</code> to the client receiving the message was <strong>about 17 ms</strong> (one run: 16.9 ms). This measures the framework and the database write only. It excludes the network, the phone, video decoding, detection, OCR, the camera node's frame skipping and the browser's rendering, so it says nothing about the time an officer would experience. <strong>No end-to-end latency was measured</strong>, and it would depend mostly on the camera node's steps, not on the alert channel.</p>
+<p>Delivery to several clients worked (TC-R3). Delivery is sequential: the loop awaits each client in turn, so a slow client delays those after it. This was not tested with a slow client.</p>
+<h3>6.4.2 Findings from the probes</h3>
+<p><strong>Table 6.2: Findings</strong></p>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Finding</th>
+<th>Evidence</th>
+<th>Severity (student's judgement)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R-1</td>
+<td><strong><code>GET /system/health</code> needs no login.</strong> It returns disk usage, free disk space, database pool use, user and report counts, and camera status</td>
+<td>Called without a token: 200 with the metrics</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>R-2</td>
+<td><strong>A deactivated user's token still opens the alert channel</strong> (the token is checked only at connect, with no database check)</td>
+<td>Token of a user set inactive: connection accepted and <code>ping</code> answered <code>pong</code></td>
+<td>High. Same root cause as the backend report's F-1</td>
+</tr>
+<tr>
+<td>R-3</td>
+<td><strong><code>disconnect()</code> raises if the connection was already removed</strong></td>
+<td>Calling it twice raised <code>ValueError: list.remove(x): x not in list</code>. A sequence that would cause this is a connection removed by a failed broadcast that then disconnects normally; that sequence was <strong>inferred, not reproduced</strong></td>
+<td>Low</td>
+</tr>
+<tr>
+<td>R-4</td>
+<td><strong>Health values are partly fixed or misnamed.</strong> "active sessions" counts active <em>accounts</em>, not sessions (it returned 0 with no users). "API response time" is the time of one <code>SELECT 1</code>. The number of camera nodes is fixed at 1. Three of four services (backend, WebSocket, JWT) are always reported "operational", whatever their state</td>
+<td>Probe output and code</td>
+<td>Medium: an administrator can be reassured falsely</td>
+</tr>
+<tr>
+<td>R-5</td>
+<td><strong>Camera nodes response lacks <code>last_ping_seconds</code></strong>, which the System Health page reads to show "Last ping: … ago"</td>
+<td>The response keys did not include it. From the page's code, an online node would show the text "Last ping: undefineds ago". Not confirmed in a browser</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>R-6</td>
+<td><strong>Camera status is a full HTTP connection each time</strong>, blocking for up to 3 s when the camera is unreachable</td>
+<td>About 2.1 s to report offline in the test; the System Health page calls both <code>health</code> and <code>camera-nodes</code>, so it probes twice</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>R-7</td>
+<td><strong>The token appears in the URL</strong> for both the WebSocket and the feed</td>
+<td>Read from the code and the client</td>
+<td>Medium (leak into logs and history)</td>
+</tr>
+</tbody>
+</table>
+<h3>6.4.3 Findings from code reading (not run)</h3>
+<ul>
+<li><strong>R-8 No reconnection in the browser (High).</strong> <code>createAlertSocket</code> handles close and error only by writing to the console. If the connection drops (network change, laptop sleep, server restart, or token expiry), the officer gets <strong>no alerts and no on-screen sign</strong> until they reload the page. The unread count is fetched once at start. For an alerting system this is the most serious real-time weakness.</li>
+<li><strong>R-9 Timer leak.</strong> Each socket starts a 30-second <code>ping</code> timer that is never cleared; after a close it keeps running, and after a re-login another one is started.</li>
+<li><strong>R-10 One notification slot.</strong> The toast holds a single notification and has no automatic dismiss; a second detection replaces the first one on screen. (The alert is still added to the alerts list when that page is open.)</li>
+<li><strong>R-11 In-memory connection list.</strong> The list lives in one server process. With several worker processes, an alert would reach only clients connected to the worker that handled the matching request. Not tested.</li>
+<li><strong>R-12 Feed proxy resources.</strong> The relay holds a worker thread for as long as a viewer watches, opens a separate upstream connection for each viewer (so several officers watching multiply the load on the phone), and does not explicitly close the upstream connection when the viewer leaves. Not measured.</li>
+<li><strong>R-13 Configuration duplication.</strong> The phone's address must be edited in two files and the camera id must match in two places. They currently agree. A mismatch would make the Cameras page show the node offline or with zero detections while detection itself still works.</li>
+<li><strong>R-14 Hard-coded backend address in the health page.</strong> The "FastAPI backend" service row shows the literal text <code>http://127.0.0.1:8000</code>.</li>
+</ul>
+<h3>6.4.4 What was not tested</h3>
+<p>A real phone, real network, real browser, video decoding, the full path from a real vehicle to a real screen, several officers at once, a slow client, several server processes, long-running connections, reconnection after a server restart, and the start-up script's behaviour on another machine.</p>
+<h2>6.5 User Evaluation</h2>
+<p>None carried out. No officer used the alert channel, and no survey or interview data exist.</p>
+<h2>6.6 Analysis of Results</h2>
+<ul>
+<li><strong>The push channel works as designed.</strong> A matching detection reaches every connected police and admin client, unauthorised connections are refused with the standard policy-violation code, and one dead connection does not block the rest.</li>
+<li><strong>The weaknesses are mostly about the connection's lifetime.</strong> R-2 (token not rechecked), R-8 (no reconnection) and R-3 (disconnect handling) all concern what happens <em>after</em> the connection exists. The design assumes a connection is opened once and stays valid. Real networks and real accounts do not behave that way.</li>
+<li><strong>The monitoring pages are more reassuring than accurate.</strong> R-4 shows that parts of "system health" are constants. A health page that says "operational" without measuring is worse than none for an operator.</li>
+<li><strong>The proxy solves the address-hiding problem but not the scaling one</strong> (R-12).</li>
+<li><strong>The 17 ms figure is not a result about the system.</strong> It only shows that the alert channel itself adds negligible delay compared with the seconds a camera pipeline needs.</li>
+</ul>
+<h2>6.7 Objective-by-Objective Evaluation</h2>
+<table>
+<thead>
+<tr>
+<th>Objective</th>
+<th>Evidence</th>
+<th>Verdict</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R1 Push detections to connected clients</td>
+<td>TC-R1 to TC-R3, TC-R7</td>
+<td><strong>Achieved</strong> (in process)</td>
+</tr>
+<tr>
+<td>R2 Restrict to police and admin</td>
+<td>TC-R4 to TC-R6</td>
+<td><strong>Achieved at connect</strong>; a deactivated user still connects (R-2)</td>
+</tr>
+<tr>
+<td>R3 Camera status and statistics</td>
+<td>TC-R11 to TC-R13</td>
+<td><strong>Achieved</strong>; <code>last_ping_seconds</code> missing (R-5)</td>
+</tr>
+<tr>
+<td>R4 Feed proxy hiding the camera address</td>
+<td>TC-R8 to TC-R10</td>
+<td><strong>Achieved</strong> for the tested case; token in URL (R-7); scaling untested</td>
+</tr>
+<tr>
+<td>R5 System health endpoint</td>
+<td>Endpoint returns metrics</td>
+<td><strong>Partly achieved</strong>: open to the public (R-1) and partly fixed values (R-4)</td>
+</tr>
+<tr>
+<td>R6 Integration through contracts and start-up script</td>
+<td>Contracts in §4.8; script exists and was read; camera ids and addresses agree</td>
+<td><strong>Achieved on the development machine</strong>; the script was not run on another machine and configuration is duplicated (R-13)</td>
+</tr>
+<tr>
+<td>R7 Verify and record weaknesses</td>
+<td>13 tests, 7 findings from probes, 7 from code reading</td>
+<td><strong>Achieved</strong> for this scope</td>
+</tr>
+</tbody>
+</table>
+<h2>6.8 Individual Results</h2>
+<p>All results here concern the real-time and integration component. The backend test suite, the camera node results and the front-end pages are in the other members' reports and are not claimed.</p>
+<h2>6.9 Chapter Summary</h2>
+<p>The alert channel, feed proxy and status logic pass all 13 in-process tests. Probes and code reading found fourteen weaknesses; the most serious are that the browser never reconnects, that a deactivated user's token still opens the alert channel, and that the health endpoint is public and partly fixed values. None has been fixed in this project.</p><h1>Chapter 7: Discussion</h1>
+<h2>7.1 Introduction</h2>
+<p>This chapter interprets the results of Chapter 6, compares them with related practice, states the contributions, and discusses limitations.</p>
+<h2>7.2 Interpretation of Findings</h2>
+<p><strong>Research question 1</strong> (can a plain WebSocket channel, authenticated with the same token as the rest of the API, deliver detections to all connected officers with no polling?). Yes, in the conditions tested. A match produced a message to every connected police and admin client, unauthorised connections were refused, and a dead connection did not block delivery. The token is reused as designed; the price is that it is checked only once.</p>
+<p><strong>Research question 2</strong> (can three processes be integrated using only network contracts?). Yes. The camera node, backend and browser share URLs, message shapes and configuration keys, and none imports another's code. The cost of this loose coupling is visible in R-13: configuration that must agree in several places, with nothing checking that it does.</p>
+<p><strong>Research question 3</strong> (what breaks?). The weaknesses fall into three groups:</p>
+<ol>
+<li><strong>Lifetime problems</strong> (R-2, R-3, R-8, R-9): the design treats a connection as permanent and a token as permanently valid. Both assumptions fail in real use, and the most damaging consequence is silent: an officer whose connection dropped sees nothing wrong and receives nothing.</li>
+<li><strong>Honesty of the monitoring</strong> (R-1, R-4, R-5, R-14): the health and status pages show some values that are measured and others that are constants or mislabelled, and the endpoint is public.</li>
+<li><strong>Scaling and resource use</strong> (R-6, R-11, R-12): the design is right for one server process, one camera and a few viewers, and unmeasured beyond that.</li>
+</ol>
+<p><strong>The alert channel is not the slow part.</strong> The 17 ms in-process figure only shows that broadcasting adds almost no delay. The time an officer waits is dominated by earlier steps: the camera node samples every fifth frame, runs detection and OCR, and is suppressed by a 15-second duplicate window. Improving the alert channel would not speed up a detection much; making it reliable (reconnection, re-checking the user) would matter more.</p>
+<h2>7.3 Comparison with Existing Work</h2>
+<p>No numeric comparison was made. Against the approaches in Chapter 2, this component gives push delivery without a broker, and lacks what libraries and brokers provide: automatic reconnection and heartbeats (Socket.IO-style libraries) and fan-out across processes (a broker). The lack of reconnection is the difference that would matter most to an officer. Against monitoring tools, the health page provides a small, readable summary but not measured, authenticated or historical monitoring.</p>
+<h2>7.4 Contributions of the Project</h2>
+<ul>
+<li><strong>Practical:</strong> a working push channel from detection to police screens on any page, an authenticated camera feed and a status page, and a single-command start-up.</li>
+<li><strong>Technical:</strong> an alert channel reusing the REST token; per-connection error isolation in broadcast; a way to test the WebSocket route and the feed proxy without a phone, using a local stand-in camera.</li>
+<li><strong>Analytical:</strong> a documented list of failure modes, separated into those demonstrated in tests and those found only by reading code.</li>
+</ul>
+<h2>7.5 Limitations and Implications</h2>
+<table>
+<thead>
+<tr>
+<th>Limitation</th>
+<th>Implication</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Everything ran in one process</td>
+<td>Timing and connection behaviour on real networks are unknown</td>
+</tr>
+<tr>
+<td>Front-end findings are from reading</td>
+<td>R-8 to R-10 may behave differently in a browser (for example browsers may retry in some conditions), and should be confirmed by running the page</td>
+</tr>
+<tr>
+<td>Stand-in camera, not the phone</td>
+<td>Real MJPEG behaviour (frame sizes, stalls, disconnects) was not tested</td>
+</tr>
+<tr>
+<td>No live <code>STOLEN</code> alert recorded</td>
+<td>The whole path from a real vehicle to a real screen has not been observed</td>
+</tr>
+<tr>
+<td>Severity ratings are the student's own</td>
+<td>Not a formal scale</td>
+</tr>
+<tr>
+<td>Findings not fixed</td>
+<td>The delivered system still has them</td>
+</tr>
+<tr>
+<td>Probes written by the author</td>
+<td>They test the failure modes the author thought of</td>
+</tr>
+</tbody>
+</table>
+<h2>7.6 Chapter Summary</h2>
+<p>The alert channel works and is simple. Its limits are about time and scale: what happens when a connection or a token outlives the conditions it was created in, and what happens beyond one process. Those limits, and the parts of the monitoring that are constants, are documented so they can be fixed.</p><h1>Chapter 8: Conclusion and Recommendations</h1>
+<h2>8.1 Introduction</h2>
+<p>This chapter summarises the project, states the conclusions the evidence supports, reviews the objectives, and gives recommendations and future work.</p>
+<h2>8.2 Summary of the Project</h2>
+<p>The group built SVDS so that a stolen-vehicle report filed by the public can be matched against plates seen by a camera. This report covered the real-time and integration component: a WebSocket channel that pushes a detection to every connected police and admin client, an authenticated proxy for the camera's live feed, camera status and system-health endpoints, the browser's alert connection and toast, and the configuration and start-up script that make the three programs work together. It was verified with in-process WebSocket tests, a stand-in camera and failure-mode probes.</p>
+<h2>8.3 Conclusions</h2>
+<ol>
+<li>A plain WebSocket channel using the same token as the REST API delivers detections to all connected officers without polling, and refuses reportees and invalid tokens.</li>
+<li>A relayed MJPEG feed can hide the camera's address and be limited to police and admin.</li>
+<li>The three programs integrate through network contracts only.</li>
+<li>The design has confirmed and likely weaknesses: the browser never reconnects, a deactivated user's token still opens the alert channel, the health endpoint is public and partly made of constants, and several resource and scaling limits are untested.</li>
+<li>No end-to-end latency and no live <code>STOLEN</code> alert were recorded, so the claim that the system alerts officers "in real time" rests on design and in-process tests, not on a measured real-world run.</li>
+</ol>
+<h2>8.4 Achievement of Objectives</h2>
+<table>
+<thead>
+<tr>
+<th>Objective</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R1 Push detections</td>
+<td>Achieved (in process)</td>
+</tr>
+<tr>
+<td>R2 Restrict to police and admin</td>
+<td>Achieved at connect; deactivated users still connect</td>
+</tr>
+<tr>
+<td>R3 Camera status</td>
+<td>Achieved; one field missing</td>
+</tr>
+<tr>
+<td>R4 Feed proxy</td>
+<td>Achieved for the tested case</td>
+</tr>
+<tr>
+<td>R5 Health endpoint</td>
+<td>Partly achieved</td>
+</tr>
+<tr>
+<td>R6 Integration and start-up</td>
+<td>Achieved on the development machine</td>
+</tr>
+<tr>
+<td>R7 Verification and honest record</td>
+<td>Achieved for this scope</td>
+</tr>
+</tbody>
+</table>
+<p>Research questions 1 and 2: yes. Research question 3: fourteen weaknesses recorded.</p>
+<h2>8.5 Recommendations</h2>
+<p>In priority order:</p>
+<ol>
+<li><strong>Reconnect automatically in the browser</strong> with a growing delay, show a visible "alerts disconnected" indicator, re-fetch the unread count and recent alerts on reconnect, and clear the ping timer on close (R-8, R-9).</li>
+<li><strong>Recheck the user</strong> when a WebSocket connects and periodically after, and close connections when the token expires or the user is deactivated (R-2).</li>
+<li><strong>Require a login (admin) for <code>/system/health</code></strong>, and make each reported value measured: real service checks, real session counts or a renamed label, the actual number of camera nodes (R-1, R-4).</li>
+<li><strong>Fix the status field mismatch</strong> by adding a last-seen value to the camera response or changing the page (R-5), and remove the hard-coded address (R-14).</li>
+<li><strong>Make <code>disconnect</code> safe</strong> if the connection is already gone (R-3).</li>
+<li><strong>Move the tokens out of URLs</strong>: send the WebSocket token as the first message, and use a short-lived, single-purpose feed token or a cookie (R-7).</li>
+<li><strong>Cache the camera status</strong> for a few seconds instead of connecting on every request (R-6).</li>
+<li><strong>Use one configuration source</strong> for the phone address and camera id, or have the node register itself with the backend (R-13).</li>
+<li><strong>If more than one server process or many viewers are expected,</strong> use a message broker for alerts and one shared upstream connection for the feed (R-11, R-12).</li>
+<li>Show more than one notification, with automatic dismissal (R-10).</li>
+</ol>
+<h2>8.6 Future Work</h2>
+<ul>
+<li>Record a full live run from a real vehicle to a real dashboard, with timestamps at each step, and report the latency.</li>
+<li>Confirm the browser findings by running the pages, and add browser-level tests.</li>
+<li>Add push notifications outside the browser (for example SMS or a mobile app) for officers away from a screen.</li>
+<li>Support several camera nodes with per-node status.</li>
+<li>Add historical monitoring of the camera and the server.</li>
+</ul><h1>References</h1>
+<ol>
+<li>Fette, I., Melnikov, A. (2011). The WebSocket Protocol. RFC 6455, IETF. https://datatracker.ietf.org/doc/html/rfc6455</li>
+<li>FastAPI. "WebSockets." FastAPI Documentation. https://fastapi.tiangolo.com/advanced/websockets/</li>
+<li>Starlette. "WebSockets" and "Testclient." https://www.starlette.io</li>
+<li>MDN Web Docs. "WebSocket API" and "Server-sent events." Mozilla. https://developer.mozilla.org</li>
+<li>Jones, M., Bradley, J., Sakimura, N. (2015). JSON Web Token (JWT). RFC 7519, IETF. https://datatracker.ietf.org/doc/html/rfc7519</li>
+<li>OWASP Foundation. "OWASP API Security Top 10." https://owasp.org</li>
+<li>Requests. "Requests: HTTP for Humans." https://requests.readthedocs.io</li>
+<li>IP Webcam (Android application) documentation, describing the MJPEG <code>/video</code> stream.</li>
+<li>React. "React Documentation." https://react.dev</li>
+<li>Uvicorn. "Uvicorn Documentation." https://www.uvicorn.org</li>
+<li>pytest. "pytest Documentation." https://docs.pytest.org</li>
+<li>Sommerville, I. (2011). Software Engineering, 9th ed. Pearson.</li>
+</ol>
+<p><span class="todo">[Add any interviews, Zambia Police Service correspondence or supervisor notes you used, and format all entries to the department's required style.]</span></p><h1>Appendix A: Individual Contribution Statement (Group Projects)</h1>
+<h2>Purpose of this Statement</h2>
+<p>This statement identifies the work for which the student was primarily responsible. It is consistent with the main report. Work by other group members is acknowledged and is not claimed.</p>
+<h2>A.1 Project and Group Information</h2>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Details</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Project Title</td>
+<td>SVDS: A Camera-Based Stolen Vehicle Detection System for the Zambia Police Service (built on the VRRS registry)</td>
+</tr>
+<tr>
+<td>Student Name</td>
+<td>[STUDENT NAME]</td>
+</tr>
+<tr>
+<td>Computer Number</td>
+<td>[COMPUTER NUMBER]</td>
+</tr>
+<tr>
+<td>Supervisor</td>
+<td>[SUPERVISOR NAME]</td>
+</tr>
+<tr>
+<td>Group Size</td>
+<td>4</td>
+</tr>
+<tr>
+<td>Group Members</td>
+<td>1. Moomba Nicholas Katapazi, [COMPUTER NUMBER] (AI/vision)<br/>2. [NAME], [COMPUTER NUMBER] (Backend and security)<br/>3. [STUDENT NAME], [COMPUTER NUMBER] (Real-time and integration)<br/>4. [NAME], [COMPUTER NUMBER] (Frontend, analytics, testing and documentation)</td>
+</tr>
+</tbody>
+</table>
+<h2>A.2 Overall Group Project</h2>
+<p>The group built <strong>SVDS/VRRS</strong>, a system with which the public files stolen-vehicle reports and police officers are alerted automatically when a camera sees a reported vehicle. It has three independently running processes: a FastAPI and PostgreSQL backend, a React frontend with three role-based portals (Reportee, Police, Admin), and a camera node that reads number plates from a phone's video stream using a custom-trained YOLOv8 detector and OCR. The common problem is that stolen-vehicle recovery depends on officers chancing to recognise a plate. The core flow is: the camera node reads a plate, the backend matches it against active reports, and connected police dashboards receive an alert over WebSocket.</p>
+<h2>A.3 Individual Role and Responsibilities</h2>
+<p>The group's work was divided into four roles. The student's role was <strong>Role 3: Real-time and integration</strong>.</p>
+<table>
+<thead>
+<tr>
+<th>No.</th>
+<th>Area of Responsibility</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>5</td>
+<td>Real-time alerts and monitoring</td>
+<td>WebSocket alerts pushed to police and admin screens; camera status and live-feed proxy; system-health endpoint; the browser's alert connection and toast</td>
+</tr>
+<tr>
+<td>-</td>
+<td>Phone-to-server integration</td>
+<td>Contracts and configuration tying phone, camera node, backend and front end together; start-up script; running the live demonstration</td>
+</tr>
+</tbody>
+</table>
+<p>Other roles, for reference: <strong>Role 1</strong> AI/vision; <strong>Role 2</strong> Backend and security; <strong>Role 4</strong> Frontend, analytics, testing and documentation.</p>
+<h2>A.4 Detailed Individual Contribution</h2>
+<ul>
+<li><strong>Real-time channel:</strong> wrote the WebSocket connection manager, route and handshake check, and the alert message.</li>
+<li><strong>Monitoring:</strong> wrote the camera-status, live-feed proxy and system-health endpoints.</li>
+<li><strong>Browser side:</strong> wired the alert connection, unread count and toast notification into the front end.</li>
+<li><strong>Integration:</strong> wrote the configuration contract (phone address, camera id, backend address) and <code>run-all.ps1</code>.</li>
+<li><strong>Testing and review:</strong> wrote and ran the in-process WebSocket tests, the stand-in camera tests and the failure-mode probes, and reviewed the browser code, recording fourteen findings.</li>
+<li><strong>Documentation:</strong> this report.</li>
+</ul>
+<h2>A.5 Individual Deliverables</h2>
+<table>
+<thead>
+<tr>
+<th>No.</th>
+<th>Deliverable</th>
+<th>Student's Contribution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>WebSocket alert channel (<code>ConnectionManager</code>, <code>/alerts/ws</code>)</td>
+<td>Designed and implemented</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Camera status, live-feed proxy and health endpoints (<code>routers/system.py</code>)</td>
+<td>Designed and implemented</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Browser alert connection and toast (<code>AlertsContext.jsx</code>, <code>NotificationToast.jsx</code>, <code>createAlertSocket</code>)</td>
+<td>Designed and implemented</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Start-up script and configuration contract (<code>run-all.ps1</code>, <code>.env</code> keys)</td>
+<td>Designed and implemented</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Failure-mode review and findings R-1 to R-14</td>
+<td>Carried out and documented</td>
+</tr>
+</tbody>
+</table>
+<h2>A.6 Contribution to the Main System or Research Output</h2>
+<p>The student produced the part that carries a detection from the backend to the officer's screen and lets operators see the camera and system state. The matching logic and the <code>check-plate</code> endpoint were built by the backend member, who calls the broadcast written here. The camera node was built by the AI/vision member; the page layouts and analytics by the frontend member. The <code>/system/audit</code> listing route sits in the same file as the monitoring routes; the records it lists were designed by the backend member.</p>
+<h2>A.7 Individual Implementation and Technical Work</h2>
+<p>Modules implemented by the student: the <code>ConnectionManager</code> and <code>/alerts/ws</code> route in <code>routers/alerts.py</code>; the <code>camera-nodes</code>, <code>live-feed</code> and <code>health</code> routes and <code>is_camera_online</code> in <code>routers/system.py</code>; <code>AlertsContext.jsx</code>, <code>NotificationToast.jsx</code> and <code>createAlertSocket</code> in the front end; <code>run-all.ps1</code>.</p>
+<h2>A.8 Individual Testing and Evaluation Contribution</h2>
+<p>The student wrote and ran the temporary tests and probes described in Chapter 6 and interpreted their results. The 31-test backend suite includes alert tests, and <strong>who wrote each of those test files should be confirmed by the student</strong>; the report does not claim them.</p>
+<h2>A.9 Collaboration with Other Group Members</h2>
+<ul>
+<li>The <strong>AI/vision member's</strong> camera node sends readings to <code>check-plate</code>; the camera id it sends must equal the backend's <code>CAMERA_NODE_ID</code>, and both share the phone stream address.</li>
+<li>The <strong>backend member's</strong> token functions and <code>check-plate</code> endpoint are reused and called.</li>
+<li>The <strong>frontend member's</strong> pages display the alerts, camera and health data, and use the message shape defined here.</li>
+</ul>
+<h2>A.10 Contribution Summary</h2>
+<ol>
+<li><strong>Work primarily completed by the student:</strong> the WebSocket channel, camera status, feed proxy, health endpoint, browser alert connection and toast, start-up script and configuration contract.</li>
+<li><strong>Work completed jointly with other members:</strong> the alert message shape (with the frontend member); the camera-node contract (with the AI/vision and backend members).</li>
+<li><strong>Work primarily completed by other members and used here:</strong> token handling and <code>check-plate</code> matching; the detection model and camera node; page layouts and analytics.</li>
+</ol>
+<h2>A.11 Estimated Contribution</h2>
+<p><em>The percentages below are the student's own estimate and must be completed by the student. They were not derived from any record.</em></p>
+<table>
+<thead>
+<tr>
+<th>Project Activity</th>
+<th>Individual Contribution</th>
+<th>Collaborative Contribution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Problem Analysis</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+<tr>
+<td>Literature Review</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+<tr>
+<td>Requirements Analysis</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+<tr>
+<td>System/Research Design</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+<tr>
+<td>Implementation / Development</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+<tr>
+<td>Testing and Evaluation</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+<tr>
+<td>Documentation</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+<tr>
+<td>Other</td>
+<td><span class="todo">[%]</span></td>
+<td><span class="todo">[%]</span></td>
+</tr>
+</tbody>
+</table>
+<h2>A.12 Statement of Authorship and Contribution</h2>
+<p>I confirm that the contribution described in this statement accurately represents the work that I personally undertook as part of the group project. I have identified collaborative work and have not knowingly claimed the work of another group member as my own.</p>
+<p><strong>Student Name:</strong> <strong><em>_</em></strong><strong><em>_</em></strong><strong><em>_</em></strong><em>
+<strong>Computer Number:</strong> <strong><em>_</em></strong><strong><em>_</em></strong><strong><em>_</em></strong></em>
+<strong>Signature:</strong> <strong><em>_</em></strong><strong><em>_</em></strong><strong><em>_</em></strong><em>
+<strong>Date:</strong> <strong><em>_</em></strong><strong><em>_</em></strong><strong><em>_</em></strong></em></p>
+<h2>A.13 Supervisor Verification</h2>
+<p>I confirm that, to the best of my knowledge, the contribution described above is consistent with the student's participation in the group project.</p>
+<p><strong>Supervisor Name:</strong> <strong><em>_</em></strong><strong><em>_</em></strong><strong><em>_</em></strong><em>
+<strong>Signature:</strong> <strong><em>_</em></strong><strong><em>_</em></strong><strong><em>_</em></strong></em>
+<strong>Date:</strong> <strong><em>_</em></strong><strong><em>_</em></strong><strong><em>_</em></strong>_</p><h1>Appendix B: User Manual / Installation Guide</h1>
+<p>This guide covers running the three programs together and the real-time features. Backend-only and camera-node-only set-up are in the other members' reports.</p>
+<h2>B.1 Requirements</h2>
+<ul>
+<li>Windows with PowerShell; Python environments for the backend and for the GPU camera node; Node.js for the front end; PostgreSQL.</li>
+<li>An Android phone with an IP Webcam app, on the same network or hotspot as the PC.</li>
+</ul>
+<h2>B.2 Configure (four places must agree)</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Key</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>vrrs-node/.env</code></td>
+<td><code>PHONE_STREAM_URL</code></td>
+<td><code>http://&lt;phone-ip&gt;:8080/video</code></td>
+</tr>
+<tr>
+<td><code>vrrs-backend/.env</code></td>
+<td><code>CAMERA_STREAM_URL</code></td>
+<td>The <strong>same</strong> address</td>
+</tr>
+<tr>
+<td><code>vrrs-node/.env</code></td>
+<td><code>CAMERA_ID</code></td>
+<td>e.g. <code>PHONE-NODE-1</code></td>
+</tr>
+<tr>
+<td><code>vrrs-backend/.env</code></td>
+<td><code>CAMERA_NODE_ID</code></td>
+<td>The <strong>same</strong> id (and optionally <code>CAMERA_NODE_LOCATION</code>)</td>
+</tr>
+<tr>
+<td><code>vrrs-node/.env</code></td>
+<td><code>BACKEND_URL</code></td>
+<td><code>http://127.0.0.1:8000</code></td>
+</tr>
+<tr>
+<td><code>vrrs-frontend/.env</code></td>
+<td><code>VITE_API_BASE_URL</code>, <code>VITE_WS_URL</code></td>
+<td><code>http://localhost:8000</code>, <code>ws://localhost:8000</code></td>
+</tr>
+</tbody>
+</table>
+<p>The phone's address changes whenever it reconnects to the hotspot, so update the first two lines each session.</p>
+<h2>B.3 Start everything</h2>
+<ol>
+<li>On the phone, open IP Webcam and tap <strong>Start server</strong>. Note the address it shows.</li>
+<li>Update the <code>.env</code> files above.</li>
+<li>From the project root run:</li>
+</ol>
+<pre><code class="language-powershell">powershell -ExecutionPolicy Bypass -File .\run-all.ps1
+</code></pre>
+<p>Three windows open: backend (port 8000), front end (port 5173) and the camera node. The node needs about 20 to 30 seconds to load its models. Close the windows to stop.</p>
+<h2>B.4 Using the real-time features</h2>
+<ul>
+<li><strong>Alerts:</strong> log in as police or admin. A "Vehicle detected" toast appears on any page when a stolen vehicle is detected, and the unread count in the navigation increases.</li>
+<li><strong>Cameras page:</strong> shows the live feed and the node's online or offline status. If the feed cannot load it shows "Camera feed unavailable".</li>
+<li><strong>System Health page (admin):</strong> shows response time, database connections, disk usage and active users.</li>
+</ul>
+<h2>B.5 Troubleshooting</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Likely cause</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>No toast although the node reports <code>STOLEN</code></td>
+<td>The browser's alert connection dropped (the page does not reconnect)</td>
+<td>Reload the page; check the browser console for <code>[WS] Disconnected</code></td>
+</tr>
+<tr>
+<td>Cameras page shows offline but detection works</td>
+<td><code>CAMERA_STREAM_URL</code> in the backend <code>.env</code> differs from the node's address</td>
+<td>Make them match and restart the backend</td>
+</tr>
+<tr>
+<td>Detection count is 0 on the Cameras page</td>
+<td>Camera ids differ between node and backend</td>
+<td>Make <code>CAMERA_ID</code> and <code>CAMERA_NODE_ID</code> equal</td>
+</tr>
+<tr>
+<td>Feed says unavailable</td>
+<td>Phone app not running, wrong network, or wrong address</td>
+<td>Check the phone app and address</td>
+</tr>
+<tr>
+<td>Camera node exits at start</td>
+<td>It cannot open the stream</td>
+<td>Check <code>PHONE_STREAM_URL</code></td>
+</tr>
+<tr>
+<td>Health page slow to fill</td>
+<td>The camera check waits up to 3 s</td>
+<td>Wait; it is not an error</td>
+</tr>
+</tbody>
+</table>
+<h2>B.6 Manual check of the alert channel (no camera needed)</h2>
+<p>With the backend running and an <strong>active</strong> report for plate <code>TEST123</code> (a police user activates it), send:</p>
+<pre><code class="language-bash">curl -X POST http://127.0.0.1:8000/alerts/check-plate -H &quot;Content-Type: application/json&quot; \
+  -d '{&quot;license_plate&quot;:&quot;TEST123&quot;,&quot;camera_id&quot;:&quot;PHONE-NODE-1&quot;,&quot;confidence_score&quot;:90,&quot;location_spotted&quot;:&quot;Test&quot;}'
+</code></pre>
+<p>A police browser session should show the toast. Delete the test alert and report afterwards. (This is the manual counterpart of the tests in Chapter 6; it was not run for this report.)</p>
+<hr />
+<h1>Appendix C: Additional System Designs / Diagrams</h1>
+<h2>C.1 System architecture</h2>
+<p><img alt="Figure C.1: SVDS system architecture" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/04-system-design-1.png" /></p>
+<h2>C.2 Detection-to-alert sequence</h2>
+<p><img alt="Figure C.2: detection-to-alert sequence" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/diagrams/04-system-design-4.png" /></p>
+<h2>C.3 Screens that use this component (captured earlier from the running system)</h2>
+<p><img alt="Figure C.3: Cameras page" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/cameras.png" /></p>
+<p><img alt="Figure C.4: System health page" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/system-health.png" /></p>
+<p><img alt="Figure C.5: Live alerts page" src="file:///C:/Users/user/Downloads/vrrs/thesis/assets/screenshots/alerts.png" /></p>
+<hr />
+<h1>Appendix D: Additional Test Cases and Results</h1>
+<h2>D.1 Probe output (raw)</h2>
+<p>The temporary tests were deleted after running; their printed output is reproduced. (The single "ConnectionResetError" line that appeared in the run came from the stand-in camera closing its socket after sending three frames.)</p>
+<pre><code>PROBE ws broadcast: STOLEN_DETECTED RT12345 Toyota | http: STOLEN | in-process ms: 16.9
+PROBE ws ping -&gt; pong
+PROBE two clients both got: STOLEN_DETECTED STOLEN_DETECTED
+PROBE ws reportee token -&gt; closed code 1008
+PROBE ws no token -&gt; closed code 1008
+PROBE ws garbage token -&gt; closed code 1008
+PROBE ws with deactivated user's token -&gt; pong
+PROBE double disconnect -&gt; ValueError: list.remove(x): x not in list
+PROBE broadcast with dead conn: remaining = 1 | live got: {&quot;x&quot;: 1}
+PROBE /system/health no auth -&gt; 200 ['api_response_ms', 'db_connections_used', 'db_connections_max', 'disk_usage_percent']
+PROBE health services: [('FastAPI backend','operational'), ('PostgreSQL database','operational'), ('WebSocket alerts','operational'), ('JWT auth service','operational')]
+PROBE camera-nodes keys: ['avg_confidence','camera_id','detections','last_seen','location','status'] | has last_ping_seconds: False | status: offline
+PROBE health active_sessions = 0
+PROBE live-feed police -&gt; 200 multipart/x-mixed-replace; bou | bytes: 132 | has frames: True
+PROBE live-feed reportee -&gt; 401 | no token -&gt; 422
+PROBE camera status with reachable stream -&gt; online
+PROBE health camera online -&gt; 1
+PROBE live-feed unreachable -&gt; 503 in 2.0s
+PROBE camera status unreachable -&gt; offline in 2.1s
+</code></pre>
+<p>After the probes were removed, the existing suite was run again: 31 passed.</p>
+<h2>D.2 One test as an example</h2>
+<pre><code class="language-python">def test_ws_receives_broadcast(client, make_user, auth_headers, db_session):
+    _seed(db_session, make_user)                      # an active report for plate RT12345
+    police = make_user(role=&quot;police&quot;, badge=&quot;B1&quot;)
+    token = auth_headers(police)[&quot;Authorization&quot;].split()[1]
+    with client.websocket_connect(f&quot;/alerts/ws?token={token}&quot;) as ws:
+        resp = client.post(&quot;/alerts/check-plate&quot;, json={&quot;license_plate&quot;: &quot;RT12345&quot;, ...}).json()
+        msg = ws.receive_json()
+        assert msg[&quot;type&quot;] == &quot;STOLEN_DETECTED&quot; and resp[&quot;status&quot;] == &quot;STOLEN&quot;
+</code></pre>
+<hr />
+<h1>Appendix E: Data Collection Instruments</h1>
+<p>Not applicable. No questionnaires, interviews or surveys were used.</p>
+<hr />
+<h1>Appendix F: Additional Code / Configuration</h1>
+<h2>F.1 Browser socket helper (<code>vrrs-frontend/src/services/api.js</code>)</h2>
+<pre><code class="language-js">export const createAlertSocket = (onMessage) =&gt; {
+    const token = localStorage.getItem(&quot;vrrs_token&quot;);
+    const ws = new WebSocket(`${WS_BASE_URL}/alerts/ws?token=${token}`);
+    ws.onopen    = () =&gt; { setInterval(() =&gt; ws.readyState === 1 &amp;&amp; ws.send(&quot;ping&quot;), 30000); };
+    ws.onmessage = (e) =&gt; onMessage(JSON.parse(e.data));
+    ws.onclose   = () =&gt; console.log(&quot;[WS] Disconnected&quot;);
+    ws.onerror   = (e) =&gt; console.error(&quot;[WS] Error:&quot;, e);
+    return ws;
+};
+</code></pre>
+<p>Findings R-8 (no reconnection) and R-9 (the timer is never cleared) come from this function.</p>
+<h2>F.2 Camera online check (<code>vrrs-backend/app/routers/system.py</code>)</h2>
+<pre><code class="language-python">def is_camera_online() -&gt; bool:
+    if not CAMERA_STREAM_URL:
+        return False
+    try:
+        requests.get(CAMERA_STREAM_URL, timeout=3, stream=True).close()
+        return True
+    except requests.RequestException:
+        return False
+</code></pre>
+<h2>F.3 Start-up script (<code>run-all.ps1</code>, abridged)</h2>
+<pre><code class="language-powershell">Start-Process powershell -ArgumentList &quot;-NoExit&quot;,&quot;-Command&quot;,&quot;cd '$root\vrrs-backend'; .\venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000&quot;
+Start-Process powershell -ArgumentList &quot;-NoExit&quot;,&quot;-Command&quot;,&quot;cd '$root\vrrs-frontend'; npm run dev&quot;
+Start-Process powershell -ArgumentList &quot;-NoExit&quot;,&quot;-Command&quot;,&quot;cd '$root\vrrs-node'; C:\Users\user\anaconda3\envs\yolov8-env\python.exe plate_node.py&quot;
+</code></pre>
+<p>The camera-node line contains an absolute path to the developer's own Python environment, so the script works only on that machine until the path is changed.</p>
+<hr />
+<h1>Appendix G: Other Supporting Material</h1>
+<h2>G.1 Group role split</h2>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Work areas</th>
+<th>Focus</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1. AI/vision</td>
+<td>Detection model; camera node</td>
+<td>YOLOv8n detector, OCR pipeline</td>
+</tr>
+<tr>
+<td>2. Backend and security</td>
+<td>Backend API and database; security and access control</td>
+<td>FastAPI, PostgreSQL, JWT, roles</td>
+</tr>
+<tr>
+<td>3. Real-time and integration</td>
+<td>Real-time alerts and monitoring; phone-to-server wiring</td>
+<td><strong>This report</strong></td>
+</tr>
+<tr>
+<td>4. Frontend</td>
+<td>Frontend portals; analytics, testing and documentation</td>
+<td>React pages, analytics, run scripts</td>
+</tr>
+</tbody>
+</table>
+<h2>G.2 Findings summary</h2>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Finding</th>
+<th>Basis</th>
+<th>Severity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R-1</td>
+<td>Health endpoint needs no login</td>
+<td>Probe</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>R-2</td>
+<td>Deactivated user's token opens the alert channel</td>
+<td>Probe</td>
+<td>High</td>
+</tr>
+<tr>
+<td>R-3</td>
+<td><code>disconnect()</code> raises on double removal</td>
+<td>Probe</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>R-4</td>
+<td>Health values partly fixed or misnamed</td>
+<td>Probe and code</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>R-5</td>
+<td><code>last_ping_seconds</code> missing from camera response</td>
+<td>Probe and code</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>R-6</td>
+<td>Camera check blocks up to 3 s</td>
+<td>Probe</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>R-7</td>
+<td>Tokens in URLs</td>
+<td>Code</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>R-8</td>
+<td>Browser never reconnects</td>
+<td>Code</td>
+<td>High</td>
+</tr>
+<tr>
+<td>R-9</td>
+<td>Ping timer never cleared</td>
+<td>Code</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>R-10</td>
+<td>One notification slot, no auto-dismiss</td>
+<td>Code</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>R-11</td>
+<td>In-memory connection list, one process</td>
+<td>Code</td>
+<td>Design limit</td>
+</tr>
+<tr>
+<td>R-12</td>
+<td>Feed proxy resource use</td>
+<td>Code</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>R-13</td>
+<td>Duplicated configuration</td>
+<td>Code and check</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>R-14</td>
+<td>Hard-coded backend address in health page</td>
+<td>Code</td>
+<td>Low</td>
+</tr>
+</tbody>
+</table>
+</body></html>
