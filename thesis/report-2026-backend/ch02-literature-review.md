@@ -2,71 +2,72 @@
 
 ## 2.1 Introduction
 
-This chapter reviews the concepts and technologies behind the SVDS backend: REST APIs, token-based authentication, password hashing, role-based access control, relational data modelling and audit logging. It then looks at existing systems and identifies the gap. Section numbers follow the template.
+This chapter reviews the concepts behind the backend: resource-oriented APIs, relational data, password hashing, signed tokens, role-based access control and audit logging. It compares selected documented capabilities with the implemented prototype. Numbered references identify the sources; implementation claims are checked against the local repository.
 
 ## 2.2 Key Concepts and Theories
 
 ### 2.2.1 REST APIs and FastAPI
 
-A REST API exposes resources (here: reports, users, alerts) at URLs and uses HTTP methods (`GET`, `POST`, `PATCH`, `DELETE`) to act on them. **FastAPI** is a Python framework that builds such APIs from type-annotated functions. It validates request bodies with **Pydantic** models and generates interactive documentation (Swagger UI at `/docs`). Its **dependency injection** mechanism lets a route declare what it needs (a database session, the current user), which is how access control is attached to routes in this project.
+REST is an architectural style defined by constraints, not simply the use of HTTP verbs [10]. SVDS uses resource-oriented routes for reports, users and alerts, but this report does not establish full REST conformance. FastAPI supports typed request handling, dependency injection and generated interactive API documentation [1]. Pydantic models validate the declared input structure [4]. Validation is only as restrictive as those declarations and the route logic: declaring `status` as a string does not enforce a lifecycle.
 
 ### 2.2.2 Relational databases and ORMs
 
-A relational database stores data in tables linked by keys, and constraints (uniqueness, foreign keys, `ON DELETE CASCADE`) keep the data consistent. **PostgreSQL** is an open-source relational database. **SQLAlchemy** is an object-relational mapper (ORM): tables are described as Python classes and queries are written in Python. A weakness of `create_all()` schema creation, relevant here, is that it creates missing tables but never alters existing ones.
+PostgreSQL provides relational tables and constraints [3]. SQLAlchemy maps application classes to database structures and supports ORM queries [2]. In this project, `create_all()` creates missing tables but is not a migration mechanism for altering an existing schema. This distinction matters to the dated model/database discrepancy reported in section 4.7.1. The SQLite test database exercises much of the application logic, but cannot establish every PostgreSQL-specific behaviour.
 
 ### 2.2.3 Password hashing
 
-Passwords must never be stored in plaintext. A password *hash function* turns a password into a fixed string that cannot practically be reversed. General-purpose hashes are too fast; password hashing needs a deliberately slow, salted algorithm. **bcrypt** is such an algorithm: each hash includes a random salt and a cost factor, so identical passwords give different hashes and brute-force guessing is slow. The `passlib` library provides a `CryptContext` wrapper.
+Password storage should use a purpose-built, salted password hash. The original bcrypt work describes an adaptable computation cost intended to make offline guessing more expensive as hardware improves [6]. Passlib provides the `CryptContext` interface used by this backend [7]. Hashing does not compensate for weak passwords or unrestricted online guesses. The six-character minimum and missing login throttling are assessed separately against NIST guidance in Chapter 6 [15].
 
 ### 2.2.4 JSON Web Tokens
 
-A **JSON Web Token (JWT, RFC 7519)** is a signed string carrying *claims*, such as the user id (`sub`), the role, and an expiry (`exp`). The server signs it with a secret key (here HMAC-SHA256, `HS256`) and can later verify that it was issued by the server and has not been altered, without a database lookup. This makes the server *stateless* about sessions. The trade-off is that a token stays valid until it expires, even if the user is later deactivated or demoted, unless the server adds extra checks.
+RFC 7519 defines JWT claims, including the subject (`sub`) and expiry (`exp`) [5]. JWTs can be signed or encrypted; SVDS specifically uses signed HS256 tokens. A valid signature establishes that token contents have not been altered without the signing key; it does not establish that the account is still active or that its role is unchanged.
+
+The initial backend trusted the role claim until expiry. The corrected backend also looks up the current account on protected requests and authorises using its database role. Its authorisation decisions therefore depend on current server-side state even though the credential is a JWT. Logout remains a separate issue: returning a success message does not revoke an already-issued token.
 
 ### 2.2.5 Role-based access control
 
-In **role-based access control (RBAC)**, permissions attach to roles and users are given roles. SVDS uses three, in a hierarchy: **reportee** (public) ⊂ **police** ⊂ **admin**. The principle of *least privilege* says each role should have only what it needs. Checks must run on the server: hiding a button in the user interface is not access control, because a client can send any request.
+RBAC assigns permissions through roles rather than defining each user's permissions independently [9]. SVDS has reportee, police and admin roles, with broader privileges for police and admin. These are implemented as explicit allowed-role sets, not a database role hierarchy. Row-level ownership checks additionally restrict reportee access to reports. Public endpoints remain outside these protected-route checks.
 
 ### 2.2.6 Audit logging
 
-An **audit log** records who performed which significant action on what, and when. It supports accountability and later investigation, which matters in a police system where a report can be activated, altered or deleted.
+The project's audit table records selected account and report actions with actor and target identifiers. Such records support investigation, but the implemented trail is incomplete: failed logins are not logged, alert creation is not itself an audit-log entry, and several business changes and audit inserts use separate commits. An audit table alone therefore does not establish complete or atomic traceability.
 
 ## 2.3 Existing Systems / Related Work
 
-- **Django REST Framework / Flask** are common Python alternatives. They offer built-in or add-on authentication and permission classes. FastAPI was chosen here for its automatic validation and documentation and for explicit dependency-based access checks.
-- **OAuth 2.0 / OpenID Connect providers** (for example Keycloak or Auth0) provide hardened login, refresh tokens, revocation and multi-factor authentication. They are the mature answer for production but add a service to run and configure; this project implements a small self-contained equivalent.
-- **The OWASP guidance** (the OWASP Top 10 and the API Security Top 10) lists the risks a system like this should be checked against: broken access control, cryptographic failures, identification and authentication failures, security misconfiguration, and excessive data exposure. The security review in Chapter 6 uses these categories as a checklist.
-- **Police records systems** in the public domain are mostly closed. Published descriptions concentrate on data content, not on how access is enforced, so no detailed comparison is possible.
-
-*Note on sources.* This chapter relies on the projects' public documentation and standards, listed in the References. No performance or security figures from other systems are quoted.
+- **Django REST framework** documents pluggable authentication approaches and related permission mechanisms [12]. Its authentication framework is a useful comparison; it is not evidence that a default installation meets this project's requirements.
+- **Keycloak** documents central identity administration, session management, refresh tokens and configurable multi-factor authentication [13]. Those capabilities are broader than the project's login/JWT implementation. SVDS is not an OAuth 2.0 or OpenID Connect identity-provider equivalent merely because it issues JWTs.
+- **OWASP Top 10:2021 and API Security Top 10:2023** provide the named risk taxonomies used to organise the review [8], [14]. They guide questions about access, authentication, configuration and resource use. Mapping findings to them does not constitute certification or an exhaustive assessment.
+- **Police-system comparison:** no independently evaluated police registry was included. The report therefore makes no comparative security or recovery-performance claim about existing police systems.
 
 ## 2.4 Comparative Analysis
 
-| Criterion | This project (FastAPI + own JWT) | Django REST Framework | Hosted identity provider |
+| Criterion | This project | Django REST framework | Keycloak |
 |---|---|---|---|
-| Setup effort | Low | Medium | Medium to high |
-| Token revocation / refresh | Not implemented | Available via add-ons | Built in |
-| Multi-factor authentication | No | Add-on | Built in |
-| Understandable end to end by a student team | Yes | Yes | Less (external service) |
-| Suitable for production as is | No (see Chapter 6) | With configuration | Yes |
+| Authentication basis | Local passwords and signed JWTs | Pluggable authentication [12] | Configurable identity service [13] |
+| Current-account checks | Added after initial findings | Depends on chosen authentication implementation | Session and account management available |
+| Refresh / revocation | Not implemented | Depends on scheme or integration | Documented session/token capabilities |
+| Multi-factor authentication | Not implemented | Requires chosen integration | Configurable |
+| Production suitability | Not established; open findings | Depends on application and deployment | Depends on secure configuration and integration |
 
-The table compares design properties, not measured performance.
+The table compares documented capabilities with code-observed features. No comparative performance measurements or setup-effort experiment was conducted. A library or identity provider does not, by itself, make a deployment secure.
 
 ## 2.5 Research / Knowledge Gap
 
-Tutorials show how to add JWT login to FastAPI, but rarely show a *verified* account of what such a design does and does not protect against. The gap this report addresses is a working, tested role-based backend for a stolen-vehicle registry, together with **demonstrated** (not assumed) limitations of the token design.
+The project's practical contribution is a working backend and a documented examination of its access-control behaviour in a stolen-vehicle reporting workflow. This is a project-specific engineering contribution, not a claim that the broader literature lacks JWT security analysis. The initial and corrected versions show why current-account checks, lifecycle validation and logout invalidation must be considered separately.
 
 ## 2.6 Conceptual Framework
 
-The backend follows a layered flow in which each request passes the same gates:
+The following is a conceptual view of a protected request, not a claim about the exact order of FastAPI's internal validation and dependency execution:
 
 ```
-HTTP request → CORS check → JWT decoded (get_current_user)
-             → role check (require_role) → input validation (Pydantic)
-             → business rule (ownership, status) → database → audit record → response
+Request + token -> validate token -> read active database user
+                -> apply current role and ownership rules
+Validated input -> apply business rules -> database work -> response
+Selected state changes -> audit insert (currently a separate commit)
 ```
 
-Authentication answers "who is this?", authorisation answers "may they do this?", and the audit record answers "what happened?".
+CORS affects browser cross-origin access; it is not an authentication gate for all clients. Public endpoints do not follow the protected-request path. Authentication identifies the account, authorisation determines permitted actions, and input validation constrains data values.
 
 ## 2.7 Chapter Summary
 
-FastAPI, SQLAlchemy/PostgreSQL, bcrypt and JWT are standard, well-documented building blocks. A JWT-based RBAC design is simple and stateless but leaves token-lifetime weaknesses unless extra checks are added. The backend uses this design and the following chapters evaluate it, including where it falls short.
+The documented building blocks support the prototype, but their presence alone does not establish security. The review distinguishes a signed credential from current authorisation, input shape from business validation, and an audit table from complete traceability. The following chapters evaluate those distinctions using the project's code and test evidence.

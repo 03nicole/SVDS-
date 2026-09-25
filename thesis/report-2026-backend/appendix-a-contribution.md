@@ -9,11 +9,11 @@ This statement identifies the work for which the student was primarily responsib
 | Item | Details |
 |---|---|
 | Project Title | SVDS: A Camera-Based Stolen Vehicle Detection System for the Zambia Police Service (built on the VRRS registry) |
-| Student Name | [STUDENT NAME] |
-| Computer Number | [COMPUTER NUMBER] |
+| Student Name | Moomba Nicholas Katapazi |
+| Computer Number | 2021473333 |
 | Supervisor | [SUPERVISOR NAME] |
 | Group Size | 4 |
-| Group Members | 1. Moomba Nicholas Katapazi, [COMPUTER NUMBER] (AI/vision)<br/>2. [STUDENT NAME], [COMPUTER NUMBER] (Backend and security)<br/>3. [NAME], [COMPUTER NUMBER] (Real-time and integration)<br/>4. [NAME], [COMPUTER NUMBER] (Frontend, analytics, testing and documentation) |
+| Group Members | Backend and security: Moomba Nicholas Katapazi, 2021473333.<br/>AI/vision, real-time/integration and frontend members: details pending author input. |
 
 ## A.2 Overall Group Project
 
@@ -66,7 +66,7 @@ The student ran the 31-test backend suite, wrote and ran the security probe test
 ## A.9 Collaboration with Other Group Members
 
 - The **AI/vision member's** camera node calls `POST /alerts/check-plate`; its request and response format was agreed jointly.
-- The **real-time and integration member's** WebSocket manager is called by `check-plate` and reuses `decode_token`; the WebSocket admits only police and admin tokens.
+- The **real-time and integration member's** WebSocket manager is called by `check-plate` and reuses the shared `resolve_token_user` check; the WebSocket admits only police and admin users.
 - The **frontend member's** pages call every route in Chapter 4 and depend on the role and redirect returned at login.
 
 ## A.10 Contribution Summary
@@ -94,9 +94,12 @@ The student ran the 31-test backend suite, wrote and ran the security probe test
 
 I confirm that the contribution described in this statement accurately represents the work that I personally undertook as part of the group project. I have identified collaborative work and have not knowingly claimed the work of another group member as my own.
 
-**Student Name:** [STUDENT NAME]
-**Computer Number:** ______________________
+**Student Name:** Moomba Nicholas Katapazi
+
+**Computer Number:** 2021473333
+
 **Signature:** ______________________
+
 **Date:** ______________________
 
 ## A.13 Supervisor Verification
@@ -104,5 +107,7 @@ I confirm that the contribution described in this statement accurately represent
 I confirm that, to the best of my knowledge, the contribution described above is consistent with the student's participation in the group project.
 
 **Supervisor Name:** ______________________
+
 **Signature:** ______________________
+
 **Date:** ______________________

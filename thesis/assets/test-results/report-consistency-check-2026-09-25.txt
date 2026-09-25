@@ -1,0 +1,20 @@
+Report consistency verification - 25 September 2026
+Checkout: bea7410
+No diff from b326b21 in vrrs-backend/app, vrrs-backend/tests or vrrs-frontend.
+
+Backend command (working directory vrrs-backend):
+../.venv312/Scripts/python.exe -m pytest tests -q -p no:cacheprovider
+Observed summary: 40 passed, 87 warnings in 23.19s
+Warnings: SQLAlchemy declarative_base relocation, Pydantic class Config deprecation,
+and datetime.utcnow deprecations in project code and python-jose.
+Tests isolate DATABASE_URL to in-memory SQLite before importing the app.
+
+Frontend command (working directory vrrs-frontend): npm.cmd test
+Observed summary: tests 1; pass 1; fail 0.
+Case: alert socket ignores heartbeats, delivers alerts, and releases its timer.
+
+Backend runtime: Python 3.12.10; FastAPI 0.111.0; Starlette 0.37.2;
+Pydantic 2.7.1; SQLAlchemy 2.0.30; pytest 9.1.1; HTTPX 0.28.1.
+
+This is a verification summary, not a verbatim transcript of the historical probes.
+No production database was changed and no camera/network load test was run.

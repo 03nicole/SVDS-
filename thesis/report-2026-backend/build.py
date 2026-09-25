@@ -8,6 +8,7 @@ Usage: python build.py   ->  FinalYearReport-2026.html
 Then: build_docx.ps1 for .docx, or headless Chrome for .pdf (see README).
 """
 import re
+import json
 from pathlib import Path
 import markdown
 
@@ -20,6 +21,12 @@ META = {
     "supervisor": "[SUPERVISOR NAME]",
     "date": "[DATE OF SUBMISSION]",
 }
+
+AUTHOR = json.loads((HERE / "author-details.json").read_text(encoding="utf-8"))
+for key in ("name", "number", "degree", "supervisor", "date"):
+    if AUTHOR.get(key):
+        import html
+        META[key] = html.escape(AUTHOR[key])
 
 STYLE = """
 <style>

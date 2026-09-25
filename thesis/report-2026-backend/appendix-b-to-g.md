@@ -4,7 +4,7 @@ This guide covers the backend. The camera node and front end are documented in t
 
 ## B.1 Requirements
 
-- Python 3.12 or later, and PostgreSQL with an empty database (for example `vrrs_db`).
+- Python 3.12.10 (the tested runtime), and PostgreSQL with an empty database (for example `vrrs_db`).
 - The packages in `vrrs-backend/requirements.txt`.
 
 ## B.2 Install and configure
@@ -23,7 +23,7 @@ Edit `.env`:
 | `SECRET_KEY` | Token signing key | **Must be a long random value.** The code falls back to `changeme` if it is missing (finding F-8) |
 | `ALGORITHM` | JWT algorithm | `HS256` |
 | `TOKEN_EXPIRY_HOURS` | Token lifetime | 24 by default |
-| `CORS_ORIGINS` | Listed in the template but **not read by the code**; allowed origins are hard-coded in `main.py` (finding F-9) | |
+| `CORS_ORIGINS` | Comma-separated browser origin allow-list | Read by `get_allowed_origins`; an absent value enables four localhost defaults; an empty value permits no origin. F-9 is fixed |
 
 ## B.3 Run
 
@@ -35,9 +35,9 @@ The API runs at `http://localhost:8000`. Interactive documentation is at `/docs`
 
 Public registration creates reportees only, so the first administrator is created with the helper script `create_admin.py`:
 
-```bash
-set ADMIN_EMAIL=admin@example.local
-set ADMIN_PASSWORD=<choose a strong password>
+```powershell
+$env:ADMIN_EMAIL = "admin@example.local"
+$env:ADMIN_PASSWORD = Read-Host "Administrator password"
 python create_admin.py
 ```
 
@@ -59,7 +59,7 @@ python create_admin.py
 | `403 Access denied` | Role too low for the route | Use an account with the required role |
 | `409` when filing a report | A `missing` report for that plate exists | Check the existing report |
 | Start-up prints "error creating DB schema" | Cannot reach PostgreSQL | Check `DATABASE_URL` and that PostgreSQL is running |
-| Frontend blocked by CORS | Its origin is not in the hard-coded list | Add the origin in `main.py` |
+| Frontend blocked by CORS | Its origin is not in the configured allow-list | Set `CORS_ORIGINS` and restart the backend |
 | Deleting a report fails on an older database | The cascade constraint was created before the fix | Alter the `alerts.report_id` foreign key to `ON DELETE CASCADE` by hand |
 
 ## B.6 Run the tests
@@ -97,11 +97,11 @@ The tests use an in-memory SQLite database and do not touch PostgreSQL.
 
 ## D.1 Raw test output
 
-The full captured output of the 31 passing tests is in `thesis/assets/test-results/backend-pytest-output.txt`. The suite was re-run while preparing this report and again passed (31 passed).
+The full captured output of the 40 passing tests (commit `b326b21`) is in `thesis/assets/test-results/backend-pytest-output.txt`. The 31 tests at the evaluated commit `a349fc6` also passed when the report was first prepared.
 
 ## D.2 Probe results (raw)
 
-The probe tests were temporary and were deleted after running; their printed output is reproduced below.
+The probe tests were temporary and were deleted after running; their printed output is reproduced below. These are the results at the evaluated commit `a349fc6`; the results after the fix are in D.2a.
 
 ```
 PROBE deactivated-user token /users/me            -> 200
@@ -114,6 +114,23 @@ PROBE default-key forged token accepted           -> False
 PROBE SECRET_KEY equals 'changeme'                -> False | length 47
 PROBE token after /auth/logout                    -> 200
 ```
+
+## D.2a Probe results after the fix (raw)
+
+The same scenarios re-run against commit `b326b21` (temporary test file, deleted afterwards). Only the fields that matter are shown.
+
+```
+F1 deactivated-user token /users/me       before deactivation 200 | after 401
+F2 demoted-admin old token /system/audit  before demotion 200    | after 403
+F3 PATCH status=banana                    -> 200
+F3 PATCH status=missing                   -> 200
+F4 check-plate no-auth x3                 -> STOLEN, STOLEN, STOLEN  (alert ids 1, 2, 3)
+F6 20 wrong logins status set             -> {401}
+F7 token after /auth/logout               -> 200 (the logout call itself: 200)
+F8 SECRET_KEY equals 'changeme'           -> False (test configuration key)
+```
+
+The F-1 and F-2 lines are the only ones that changed.
 
 ## D.3 One probe as an example
 
@@ -139,6 +156,8 @@ Not applicable. No questionnaires, interviews or surveys were used.
 ## F.1 Role dependencies (`app/middleware.py`)
 
 ```python
+# As evaluated at commit a349fc6 (the source of F-1 and F-2). Since b326b21 the
+# body looks the user up in the database instead (see section 5.4.2).
 def get_current_user(token: str = Depends(oauth2_scheme)):
     payload = decode_token(token)
     if not payload:
@@ -157,7 +176,7 @@ def require_role(*roles):
 
 ## F.2 Where finding F-1 and F-2 come from
 
-`get_current_user` returns the role from the token and never reads the database, so a changed role or a deactivated account is not seen until the token expires. A fix would look up `User` by id here and reject inactive users.
+At the evaluated commit, `get_current_user` returned the role from the token and never read the database, so a changed role or a deactivated account was not seen until the token expired. The fix, applied in `b326b21`, looks up `User` by id here and rejects missing or inactive users (§5.4.2).
 
 ## F.3 Environment template (`.env.example`)
 
@@ -184,15 +203,15 @@ CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 
 ## G.2 Findings summary
 
-| ID | Finding | Severity |
-|---|---|---|
-| F-1 | Token valid after deactivation | High |
-| F-2 | Token keeps old role after demotion | High |
-| F-3 | Report status accepts any value | Medium |
-| F-4 | Public `check-plate` creates repeat alerts | Medium |
-| F-5 | Duplicate check ignores `under_review` | Low |
-| F-6 | No limit on failed logins | Medium |
-| F-7 | Logout does not invalidate token | Medium |
-| F-8 | Default signing key fallback (latent) | Latent |
-| F-9 | `CORS_ORIGINS` setting unused | Low |
-| F-10 | `create_admin.py` default password in source | Medium |
+| ID | Finding | Severity at initial evaluation | Current status |
+|---|---|---|---|
+| F-1 | Token valid after deactivation | High | Fixed |
+| F-2 | Token keeps old role after demotion | High | Fixed |
+| F-3 | Report status accepts any value | Medium | Open |
+| F-4 | Public `check-plate` creates repeat alerts | Medium | Open |
+| F-5 | Duplicate check ignores `under_review` | Low | Open |
+| F-6 | No limit on failed logins | Medium | Open |
+| F-7 | Logout does not invalidate token | Medium | Open |
+| F-8 | Default signing key fallback (latent) | Latent | Open |
+| F-9 | `CORS_ORIGINS` setting unused | Low | Fixed |
+| F-10 | `create_admin.py` default password in source | Medium | Open |

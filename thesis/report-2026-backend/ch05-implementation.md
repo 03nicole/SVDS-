@@ -33,7 +33,7 @@ This chapter describes how the backend was built: its modules, the key implement
 | `app/routers/analytics.py`, `system.py` | 87, 146 | Statistics; audit-log listing, camera status, feed proxy, health | Frontend and real-time members |
 | `tests/` | 5 test files and `conftest.py` | Automated tests | See §5.7 |
 
-Line counts are from the files as they stand.
+Line counts are historical measurements from `a349fc6`; they are not current counts after the regression fixes.
 
 ## 5.4 Key Implementation Details
 
@@ -55,11 +55,34 @@ def create_access_token(user_id, role):
 
 ### 5.4.2 Access control (`middleware.py`)
 
+Protected HTTP routes use `get_current_user` directly or through role dependencies. The WebSocket and live-feed routes call the shared `resolve_token_user` helper. Since commit `b326b21` it re-reads the user from the database on each request (condensed from the source):
+
+```python
+def resolve_token_user(token: str, db: Session):
+    payload = decode_token(token) if token else None
+    try:
+        user_id = int(payload["sub"]) if payload else None
+    except (KeyError, ValueError, TypeError):
+        user_id = None
+    user = db.query(User).filter(User.id == user_id).first() if user_id is not None else None
+    if not user or not user.is_active:
+        raise HTTPException(status_code=401, detail="Invalid or expired token.",
+                            headers={"WWW-Authenticate": "Bearer"})
+    return {"id": user.id, "role": user.role}   # role from the database, not the token
+
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    return resolve_token_user(token, db)
+```
+
+Before this change `get_current_user` returned `{"id": int(payload["sub"]), "role": payload["role"]}` straight from the token, which is why a deactivated or demoted user kept their access (F-1, F-2). The cost is one primary-key query per request. The same function now also guards the WebSocket handshake and the live-feed proxy, and the WebSocket re-checks it on every heartbeat and before every broadcast, so a revoked officer stops receiving alerts. Those two endpoints belong to the real-time member's work; the shared check is noted here because it lives in this component.
+
 ```python
 def require_role(*roles):
     def checker(user: dict = Depends(get_current_user)):
         if user["role"] not in roles:
-            raise HTTPException(status_code=403, detail=f"Access denied. Required roles: {list(roles)}")
+            raise HTTPException(
+                status_code=403, detail=f"Access denied. Required roles: {list(roles)}"
+            )
         return user
     return checker
 
@@ -88,10 +111,17 @@ report = db.query(Report).filter(
 ).first()
 if not report:
     return {"status": "CLEAR"}
-new_alert = Alert(report_id=report.id, ...)
-db.add(new_alert); db.commit()
-await manager.broadcast({... "type": "STOLEN_DETECTED" ...})
-return {"status": "STOLEN", "alert_id": new_alert.id, "vehicle": {...}}
+new_alert = Alert(
+    report_id=report.id, location_spotted=data.location_spotted,
+    camera_id=data.camera_id, confidence_score=data.confidence_score,
+    image_path=data.image_path,
+)
+db.add(new_alert); db.commit(); db.refresh(new_alert)
+# Selected fields shown; the full broadcast also carries vehicle details.
+await manager.broadcast({
+    "type": "STOLEN_DETECTED", "alert_id": new_alert.id,
+    "plate": data.license_plate.upper(),
+}, db)
 ```
 
 ### 5.4.5 Admin safeguards (`users.py`)
@@ -100,15 +130,15 @@ An administrator cannot change, deactivate or delete their own account (prevents
 
 ### 5.4.6 Audit records
 
-Registration, login, report filing, updates, activation, found, deletion, account creation, role change, activation or deactivation of an account, password change, profile update and false-positive flags each add an `AuditLog` row with the actor's id, a text description, the target table and the target id.
+The live database holds 207 audit rows against 21 users (25 September 2026). Registration, login, report filing, updates, activation, found, deletion, account creation, role change, activation or deactivation of an account, password change, profile update and false-positive flags each add an `AuditLog` row with the actor's id, a text description, the target table and the target id.
 
 ## 5.5 Integration
 
 - **Camera node (AI/vision member):** the only contract is `POST /alerts/check-plate` with `license_plate`, `camera_id`, `confidence_score`, `location_spotted` and optional `image_path`. The backend normalises the plate itself, so the node does not need to reproduce the matching rules.
-- **Real-time member:** `check-plate` calls the `ConnectionManager.broadcast` method they wrote; the WebSocket handshake reuses `decode_token` and admits only police and admin tokens.
-- **Frontend member:** the front end calls the routes in §4.8 with the token in an `Authorization: Bearer` header and reads the role from the login response. CORS is limited to the local development origins `localhost:5173` and `5174` (and `127.0.0.1` equivalents).
+- **Real-time member:** `check-plate` calls the `ConnectionManager.broadcast` method they wrote; the WebSocket handshake reuses the same `resolve_token_user` database check and admits only police and admin users.
+- **Frontend member:** the front end calls the routes in §4.8 with the token in an `Authorization: Bearer` header and reads the role from the login response. CORS reads `CORS_ORIGINS`; if the variable is absent, the defaults are `localhost:5173` and `5174` plus their `127.0.0.1` equivalents.
 
-Note: `main.py` builds the CORS list from four hard-coded origins. `CORS_ORIGINS` appears in `.env.example` but is not read by the application code, so changing it has no effect (checked by searching the source).
+`get_allowed_origins()` splits and trims the configured comma-separated origins. An explicitly empty string produces an empty allow-list. CORS governs browser cross-origin access; it does not authenticate camera nodes or prevent requests from non-browser clients [1].
 
 ## 5.6 Challenges and Solutions
 
@@ -136,8 +166,8 @@ The student was responsible for **work areas 3 and 4** of the group's seven (App
 
 Work by other members that this component uses, **not claimed here**: the WebSocket manager and endpoint, camera status, live-feed proxy and system health (real-time and integration member); analytics endpoints and the React pages (frontend member); the detection model and camera node (AI/vision member).
 
-*Tests.* The group's role split placed "tests" with the frontend member. The 31 backend tests exercise this component, and the student ran them and interpreted their results for this report. **Who wrote each test file should be confirmed by the student before submission**; §6.3 describes them without claiming authorship.
+*Tests.* The group's role split placed "tests" with the frontend member. The backend tests (31 at the evaluated commit, 40 now) exercise this component, and the student ran them and interpreted their results for this report. **Who wrote each test file should be confirmed by the student before submission**; §6.3 describes them without claiming authorship.
 
 ## 5.8 Chapter Summary
 
-The backend is about 730 lines of Python across ten modules (`main.py`, `database.py`, `models.py`, `schemas.py`, `auth.py`, `middleware.py` and four routers; the generic `model.py` placeholder is not counted). It hashes passwords with bcrypt, issues signed role-carrying tokens, enforces roles with reusable dependencies, and answers plate-match queries. Its notable implementation problems were the missing cascade and the gap between PostgreSQL and the SQLite test database.
+At the initial evaluation, the backend comprised about 730 lines of Python across ten modules (`main.py`, `database.py`, `models.py`, `schemas.py`, `auth.py`, `middleware.py` and four routers; the generic `model.py` placeholder is not counted). It hashes passwords with bcrypt, issues signed role-carrying tokens, enforces roles with reusable dependencies, and answers plate-match queries. Its notable implementation problems were the missing cascade and the gap between PostgreSQL and the SQLite test database.

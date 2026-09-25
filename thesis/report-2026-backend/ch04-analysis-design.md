@@ -86,7 +86,31 @@ Four tables, defined once in `models.py`.
 | `alerts` | Detections | Foreign key `report_id` → `reports` with `ON DELETE CASCADE` |
 | `audit_log` | Action trail | Foreign key `performed_by` → `users` (nullable) |
 
+### 4.7.1 The live database
+
+The design above was checked against the running development database (PostgreSQL 18.3, database `vrrs_db`), by reading its catalogue and counting rows on 25 September 2026. Only structure and counts were read; no personal data was queried.
+
+Figure 4.3 shows the schema as the database itself reports it (column types come from `information_schema`, not from `models.py`).
+
+<img src="../assets/diagrams/backend-live-schema-1.png" alt="Figure 4.3: live database schema" style="max-height:19cm; width:auto;">
+
+*Figure 4.3: the live database schema, generated from the PostgreSQL catalogue.*
+
+**Table 4.4: Tables in the live database**
+
+| Table | Columns | Rows | Notes |
+|---|---|---|---|
+| `users` | 11: `id`, `first_name`, `last_name`, `email`, `phone`, `password_hash`, `role`, `national_id`, `badge_number`, `is_active`, `created_at` | 21 | 2 admin, 4 police, 15 reportee; all active |
+| `reports` | 16: `id`, `reported_by`, `owner_name`, `license_plate`, `vehicle_make`, `vehicle_model`, `vehicle_color`, `vehicle_year`, `chassis_number`, `status`, `last_seen_location`, `description`, `report_date`, `resolved_date`, `resolved_by`, `incident_date` | 18 | 13 `found`, 3 `missing`, 2 `under_review` |
+| `alerts` | 8: `id`, `report_id`, `location_spotted`, `camera_id`, `confidence_score`, `image_path`, `is_read`, `detected_at` | 23 | |
+| `audit_log` | 6: `id`, `performed_by`, `action`, `target_table`, `target_id`, `timestamp` | 207 | Largest table: it records every action |
+
+**Constraints and indexes found.** Four foreign keys: `reports.reported_by` and `reports.resolved_by` and `audit_log.performed_by`, each referencing `users(id)`, and `alerts.report_id` referencing `reports(id)` with `ON DELETE CASCADE`. Every table has a primary key. `users.email` has a unique index; `reports.license_plate` has an ordinary index (the column the plate-match query searches). There is **no check constraint anywhere**, so nothing in the database stops an invalid `role` or `status` (the root of F-3).
+
+**A drift between model and database.** In `models.py`, `reports.incident_date` is declared `DateTime(timezone=True)`, but in the live database the column is `timestamp without time zone`, while every other timestamp column has a time zone. The most likely cause is the one already noted below: `create_all()` never alters an existing table, so the column kept the type it was first created with. It is small here, but it is the kind of silent difference that a migration tool such as Alembic would have caught.
+
 Design decisions:
+
 - **`alerts.license_plate` is not stored.** It is a computed property reading through the linked report, avoiding duplicated data.
 - **Cascade delete.** Deleting a report also deletes its alerts (the ORM relationship uses `cascade="all, delete-orphan"`, and the database constraint uses `ON DELETE CASCADE`).
 - **Roles and statuses are plain strings**, not database enumerations or check constraints. This is simple, but the database itself does not stop an invalid value (§6.4).
@@ -109,6 +133,14 @@ The backend's interface is its HTTP API, documented automatically at `/docs`. Ac
 | Users | `POST /users/invite`, `PATCH /users/{id}/role`, `/toggle-active`, `DELETE /users/{id}` | | | ✔ |
 | Analytics | `GET /analytics/...` | | ✔ | ✔ (`user-growth` admin only) |
 | System | `GET /system/audit` | | | ✔ |
+| System | `GET /system/camera-nodes`, `/system/live-feed` | | ✔ | ✔ |
+| System | `GET /system/health` | public | public | public |
+
+`/system/health` currently has no authentication dependency. Its `active_sessions` metric counts active user accounts, not live authenticated sessions; the service-status labels are not independent checks of every component. Restricting detailed operational metrics should be considered before deployment. This is an additional scope observation, not a newly measured result in the original F-1 to F-10 series.
+
+The interactive documentation FastAPI generates from these routes is shown in Figure 4.4; it lists every route above with its request and response schemas.
+
+![Figure 4.4: the generated API documentation at /docs](../assets/screenshots/swagger-docs.png)
 
 The web pages that use these routes were designed by the frontend member.
 
@@ -116,15 +148,17 @@ The web pages that use these routes were designed by the frontend member.
 
 ### 4.9.1 Authentication and token design
 
-![Figure 4.3: authentication sequence](../assets/diagrams/04-system-design-3.png)
+![Figure 4.5: authentication sequence](../assets/diagrams/04-system-design-3.png)
 
-On login the server looks up the user by lower-cased email, verifies the password against the stored bcrypt hash, rejects deactivated accounts, writes an audit record, and returns a JWT whose claims are `sub` (user id), `role` and `exp` (default 24 hours, configurable). The token is signed with HS256 using `SECRET_KEY` from the environment. On each request, `get_current_user` decodes the token and returns the user id and role **taken from the token**.
+On login the server looks up the user by lower-cased email, verifies the password against the stored bcrypt hash, rejects deactivated accounts, writes an audit record, and returns a JWT whose claims are `sub` (user id), `role` and `exp` (default 24 hours, configurable). The token is signed with HS256 using `SECRET_KEY` from the environment. On each request, `get_current_user` decodes the token, then **looks the user up in the database** and returns the id and role from that row; a user who no longer exists or is not active is refused with 401. (At the first evaluated commit, `a349fc6`, it returned the id and role **taken from the token** and did not consult the database; that was findings F-1 and F-2, fixed in `b326b21`. §5.4.2 shows the code.)
+
+![Figure 4.6: per-request authorisation after the fix](../assets/diagrams/backend-token-check-1.png)
 
 ### 4.9.2 Role enforcement
 
-`require_role(*roles)` builds a dependency that returns `403` if the token's role is not in the list. Three shortcuts wrap it: `is_reportee` (all three roles), `is_police` (police and admin), `is_admin` (admin only). Routes attach them with `Depends(...)`. Row-level rules are added inside the route: a reportee's list is filtered by `reported_by`, and reading another reportee's report returns 403.
+`require_role(*roles)` builds a dependency that returns `403` if the current database role is not in the list. Three shortcuts wrap it: `is_reportee` (all three roles), `is_police` (police and admin), `is_admin` (admin only). Routes attach them with `Depends(...)`. Row-level rules are added inside the route: a reportee's list is filtered by `reported_by`, and reading another reportee's report returns 403.
 
-![Figure 4.4: role-based route access](../assets/diagrams/04-system-design-5.png)
+![Figure 4.7: role-based route access](../assets/diagrams/04-system-design-5.png)
 
 ### 4.9.3 Plate matching
 
@@ -136,7 +170,7 @@ On login the server looks up the user by lower-cased email, verifies the passwor
 under_review --(police: activate)--> missing --(police: mark found)--> found
 ```
 
-Only `missing` reports are matched. `activate` accepts only `under_review`; `found` refuses a report that is already found. The general `PATCH /reports/{id}` route is separate and is discussed in §6.4.
+Only `missing` reports are matched. `activate` accepts only `under_review`; `found` refuses an already-found report but does not require the previous status to be `missing`, so it also permits direct resolution from `under_review`. The general `PATCH /reports/{id}` route is separate and is discussed in §6.4.
 
 ## 4.10 Chapter Summary
 

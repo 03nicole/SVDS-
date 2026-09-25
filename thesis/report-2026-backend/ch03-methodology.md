@@ -8,7 +8,7 @@ This chapter explains how the backend was developed and evaluated: the approach,
 
 The project was built **iteratively**. The web application (backend and frontend) and the camera-node pipeline were two work-streams that met at one point, `POST /alerts/check-plate`. For the backend, work proceeded in slices: data model first, then authentication, then role checks, then the report lifecycle, then the plate-match endpoint and the alert and analytics routes. Each slice was tried through FastAPI's interactive `/docs` page and later covered by automated tests.
 
-A **design-and-verify** approach was used for security: after the features worked, the code was read for weaknesses, each suspected weakness was turned into a short probe test, and only behaviour actually observed was recorded as a finding (§6.4).
+A **design-and-verify** approach was used for security: after the features worked, the code was read for weaknesses, each suspected weakness was turned into a short probe test, and findings were distinguished as observed test behaviour, configuration checks or source-code observations (§6.4).
 
 ```
 Requirements → Design → Implementation → Integration → Testing / Security review → (issues found? back)
@@ -45,17 +45,17 @@ Versions are those pinned in `vrrs-backend/requirements.txt`.
 
 ## 3.6 Ethical and Legal Considerations
 
-- **Personal data.** The system stores personal and police data. Access is limited by role, passwords are hashed, and every state-changing action is audited. A deployment would also need a legal basis and a retention policy under Zambian data protection law; those are not addressed by the code.
+- **Personal data.** The system stores personal and police data. Access is limited by role, passwords are hashed, and many account and report changes are audited, with gaps and non-atomic writes described in section 6.4. The Data Protection Act, 2021 is relevant background legislation [16]; this project has not established deployment compliance or a complete retention policy.
 - **Data exposure.** Reportees can read only their own reports. Police can read all reports and all users. The response models limit which user fields are returned (§4.4); the password hash is not among them.
 - **Accountability.** The audit log gives a trace of who activated, resolved or deleted a report and who changed a role, but it has gaps (§6.4).
-- **False matches.** A wrong plate match could point officers at an innocent driver. The backend matches only against reports police have activated, and officers can flag alerts as false positives.
+- **False matches.** A wrong plate match could point officers at an innocent driver. The backend matches reports whose stored status is `missing`; the generic update route can also set that status without using activation (F-3), and officers can flag alerts as false positives.
 - **Unauthenticated endpoint.** `check-plate` is public because the camera has no user identity. This is a deliberate trade-off with a demonstrated consequence (§6.4).
 - **Secrets.** The signing key and database password live in a `.env` file that is not committed; `.env.example` documents the keys with placeholder values.
 - **Responsible testing.** Security probes were run only against the project's own code using an in-memory test database, never against a live deployment or anyone else's system.
 
 ## 3.7 Evaluation Method
 
-1. **Automated tests** (pytest, 31 tests) covering authentication, role access, reports, the plate-match endpoint and analytics.
+1. **Automated tests** (pytest [11]; 31 tests at the evaluated commit, 40 after the fix) covering authentication, role access, reports, the plate-match endpoint and analytics.
 2. **Targeted security probes**: short, temporary tests written to confirm or refute suspected weaknesses. They were run, their output recorded, and then removed so that the test suite stays a suite of intended behaviour.
 3. **Code review** against the OWASP categories listed in §2.3.
 4. **Objective-by-objective review** against B1 to B7 in §1.4.

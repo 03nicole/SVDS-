@@ -62,20 +62,20 @@ Without these, a reporting system either leaks sensitive vehicle and personal da
 ### 1.6.2 Out of Scope
 
 - The detection model and camera node (AI/vision member).
-- The WebSocket broadcast, camera status and live-feed proxy, and system health (real-time and integration member). The `check-plate` endpoint *calls* the broadcast but does not implement it.
+- The full WebSocket, camera-status, live-feed and health implementations (real-time and integration work). This report includes their shared token-validation boundary and relevant regression results; it does not claim their complete implementation.
 - The React portals and analytics charts (frontend member).
 - Production hosting, TLS termination, backups and database migrations.
 
 ## 1.7 Significance of the Project
 
-The backend is what makes SVDS safe to use. The Zambia Police Service gains a single record of reports that officers in any station can search, with each action traceable to an account. The public gain a way to file a report and follow its status without being able to see anyone else's. The project also documents, honestly, where a small role-based API of this kind is weak, which is useful to anyone extending it.
+The backend provides the storage and access-control foundation for the SVDS prototype. Its intended benefit is a shared record that authorised officers can search, with an audit trail for many account and report changes. Deployment by the Zambia Police Service and complete action traceability have not been demonstrated. The public gain a way to file a report and follow its status without being able to see anyone else's. The project also documents, honestly, where a small role-based API of this kind is weak, which is useful to anyone extending it.
 
 ## 1.8 Limitations
 
 - Security testing was limited to automated tests and targeted probes run against an in-memory test database. No penetration test, load test or external review was carried out.
 - The tests run on SQLite, not on the PostgreSQL database used in practice. One PostgreSQL-specific function is emulated in the test set-up (§6.2).
 - No formal stakeholder interviews are recorded, so requirements are the group's own analysis.
-- Several weaknesses found (§6.4) were **documented, not fixed**, within the project's time.
+- Of the ten weaknesses found (§6.4), three were fixed and re-verified (F-1, F-2, F-9); the other seven were **documented, not fixed**, within the project's time.
 
 ## 1.9 Organisation of the Report
 
