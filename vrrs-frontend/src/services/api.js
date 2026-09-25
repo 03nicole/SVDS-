@@ -79,9 +79,16 @@ export const systemAPI = {
 export const createAlertSocket = (onMessage) => {
     const token = localStorage.getItem("vrrs_token");
     const ws = new WebSocket(`${WS_BASE_URL}/alerts/ws?token=${token}`);
-    ws.onopen    = () => { setInterval(() => ws.readyState === 1 && ws.send("ping"), 30000); };
-    ws.onmessage = (e) => onMessage(JSON.parse(e.data));
-    ws.onclose   = () => console.log("[WS] Disconnected");
+    let heartbeat;
+    ws.onopen = () => { heartbeat = setInterval(() => ws.readyState === 1 && ws.send("ping"), 30000); };
+    ws.onmessage = (e) => {
+        if (e.data === "pong") return;
+        onMessage(JSON.parse(e.data));
+    };
+    ws.onclose = () => {
+        clearInterval(heartbeat);
+        console.log("[WS] Disconnected");
+    };
     ws.onerror   = (e) => console.error("[WS] Error:", e);
     return ws;
 };

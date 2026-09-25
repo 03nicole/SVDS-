@@ -7,49 +7,79 @@ import re
 from app.database import get_db
 from app.models import Alert, Report, AuditLog
 from app.schemas import AlertCreate, AlertOut
-from app.middleware import get_current_user, is_police
-from app.auth import decode_token
+from app.middleware import get_current_user, is_police, resolve_token_user
 
 router = APIRouter(prefix="/alerts", tags=["Alerts"])
 
 class ConnectionManager:
     def __init__(self):
         self.active_connections: list[WebSocket] = []
+        self.tokens: dict[WebSocket, str] = {}
 
-    async def connect(self, websocket: WebSocket):
+    async def connect(self, websocket: WebSocket, token: str):
         await websocket.accept()
         self.active_connections.append(websocket)
+        self.tokens[websocket] = token
 
     def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+        self.tokens.pop(websocket, None)
 
-    async def broadcast(self, data: dict):
+    async def broadcast(self, data: dict, db: Session):
         message = json.dumps(data)
         disconnected = []
-        for connection in self.active_connections:
+        for connection in list(self.active_connections):
             try:
+                try:
+                    user = resolve_token_user(self.tokens.get(connection), db)
+                    authorized = user["role"] in ("police", "admin")
+                except HTTPException:
+                    authorized = False
+                if not authorized:
+                    disconnected.append(connection)
+                    await connection.close(code=1008)
+                    continue
                 await connection.send_text(message)
             except Exception:
                 disconnected.append(connection)
         for conn in disconnected:
-            self.active_connections.remove(conn)
+            self.disconnect(conn)
 
 manager = ConnectionManager()
 
 @router.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)):
     token = websocket.query_params.get("token")
-    payload = decode_token(token) if token else None
-    if not payload or payload.get("role") not in ("police", "admin"):
+    try:
+        user = resolve_token_user(token, db)
+    except HTTPException:
         await websocket.close(code=1008)
         return
-    await manager.connect(websocket)
+    finally:
+        db.rollback()
+    if user["role"] not in ("police", "admin"):
+        await websocket.close(code=1008)
+        return
+    await manager.connect(websocket, token)
     try:
         while True:
             data = await websocket.receive_text()
+            try:
+                user = resolve_token_user(token, db)
+            except HTTPException:
+                await websocket.close(code=1008)
+                return
+            finally:
+                db.rollback()
+            if user["role"] not in ("police", "admin"):
+                await websocket.close(code=1008)
+                return
             if data == "ping":
                 await websocket.send_text("pong")
     except WebSocketDisconnect:
+        pass
+    finally:
         manager.disconnect(websocket)
 
 @router.post("/check-plate")
@@ -69,7 +99,7 @@ async def check_plate(data: AlertCreate, db: Session = Depends(get_db)):
             "plate": data.license_plate.upper(), "location": data.location_spotted,
             "camera_id": data.camera_id, "confidence": data.confidence_score,
             "vehicle_make": report.vehicle_make, "vehicle_model": report.vehicle_model,
-            "vehicle_color": report.vehicle_color, "detected_at": str(new_alert.detected_at)})
+            "vehicle_color": report.vehicle_color, "detected_at": str(new_alert.detected_at)}, db)
         return {"status": "STOLEN", "alert_id": new_alert.id,
             "vehicle": {"make": report.vehicle_make, "model": report.vehicle_model, "color": report.vehicle_color}}
     except Exception as e:

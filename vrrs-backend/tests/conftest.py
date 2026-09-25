@@ -2,6 +2,10 @@ import os
 import re
 import sys
 
+# App import creates tables, so isolate the database before importing it.
+os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+os.environ["SECRET_KEY"] = "test-only-secret-not-for-deployment"
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest

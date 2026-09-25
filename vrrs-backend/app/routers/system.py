@@ -8,11 +8,10 @@ from sqlalchemy import desc, func, text, case
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import requests
-from app.database import get_db, engine
-from app.middleware import is_admin, is_police
+from app.database import get_db
+from app.middleware import is_admin, is_police, resolve_token_user
 from app.models import Alert, AuditLog, Report, User
 from app.schemas import AuditLogOut
-from app.auth import decode_token
 
 router = APIRouter(prefix="/system", tags=["System"])
 
@@ -72,15 +71,15 @@ def get_camera_nodes(user=Depends(is_police), db: Session = Depends(get_db)):
     }]
 
 @router.get("/live-feed")
-def get_live_feed(token: str = Query(...)):
+def get_live_feed(token: str = Query(...), db: Session = Depends(get_db)):
     """Proxies the configured camera's MJPEG stream so the frontend can embed
     it in an <img> tag without exposing the camera's raw network address.
     <img> tags can't send an Authorization header, so the token is passed
     as a query param instead and checked manually here.
     """
-    payload = decode_token(token)
-    if not payload or payload.get("role") not in ("police", "admin"):
-        raise HTTPException(status_code=401, detail="Invalid or unauthorized token.")
+    user = resolve_token_user(token, db)
+    if user["role"] not in ("police", "admin"):
+        raise HTTPException(status_code=403, detail="Access denied.")
     if not CAMERA_STREAM_URL:
         raise HTTPException(status_code=503, detail="No camera stream configured.")
     try:
@@ -116,9 +115,18 @@ def get_system_health(db: Session = Depends(get_db)):
     disk_usage_percent = round((1 - disk_free / disk_total) * 100, 1)
     disk_free_gb = round(disk_free / (1024 ** 3), 1)
 
-    pool = engine.pool
-    db_connections_used = pool.checkedout()
-    db_connections_max = pool.size() + getattr(pool, "_max_overflow", 0)
+    pool = db.get_bind().pool
+    # Non-queue pools do not expose usage/capacity metrics.
+    checkedout = getattr(pool, "checkedout", None)
+    size = getattr(pool, "size", None)
+    db_connections_used = checkedout() if callable(checkedout) else None
+    overflow = getattr(pool, "_max_overflow", None)
+    capacity = size() if callable(size) else None
+    db_connections_max = (
+        capacity + overflow
+        if capacity and overflow is not None and overflow >= 0
+        else None
+    )
 
     uptime_seconds = int((datetime.utcnow() - SERVER_START).total_seconds())
 

@@ -32,7 +32,7 @@ export default function SystemHealth() {
 
             <div className="rd-grid-4">
                 <article className="rd-card"><div className="rd-stat-label">API response time</div><strong className="rd-stat-value">{metrics.api_response_ms || 0}ms</strong><span className="rd-stat-note success">Normal</span></article>
-                <article className="rd-card"><div className="rd-stat-label">DB connections</div><strong className="rd-stat-value">{metrics.db_connections_used || 0}/{metrics.db_connections_max || 0}</strong><span className="rd-stat-note success">Healthy</span></article>
+                <article className="rd-card"><div className="rd-stat-label">DB connections</div><strong className="rd-stat-value">{metrics.db_connections_used != null && metrics.db_connections_max != null ? `${metrics.db_connections_used}/${metrics.db_connections_max}` : "—"}</strong>{metrics.db_connections_used != null && metrics.db_connections_max != null && <span className="rd-stat-note success">Healthy</span>}</article>
                 <article className="rd-card"><div className="rd-stat-label">Disk usage</div><strong className="rd-stat-value">{metrics.disk_usage_percent || 0}%</strong><span className="rd-stat-note success">{metrics.disk_free_gb || 0} GB free</span></article>
                 <article className="rd-card"><div className="rd-stat-label">Active sessions</div><strong className="rd-stat-value">{metrics.active_sessions || 0}</strong><span className="rd-stat-note">Right now</span></article>
             </div>

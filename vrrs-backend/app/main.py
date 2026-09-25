@@ -9,6 +9,9 @@ load_dotenv()
 
 
 def get_allowed_origins() -> list[str]:
+    configured = os.getenv("CORS_ORIGINS")
+    if configured is not None:
+        return [origin.strip() for origin in configured.split(",") if origin.strip()]
     return [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
